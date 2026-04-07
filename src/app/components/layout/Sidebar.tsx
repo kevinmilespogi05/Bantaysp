@@ -18,7 +18,6 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
-  Shield,
   LogOut,
   BarChart3,
   X,
@@ -29,6 +28,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
+import { BantayLogo } from "../ui/BantayLogo";
 
 // ─── Nav Item Types ───────────────────────────────────────────────────────────
 
@@ -212,9 +212,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           collapsed && !isMobile ? "justify-center px-2" : ""
         }`}
       >
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm shrink-0">
-          <Shield className="w-5 h-5 text-white" />
-        </div>
+        <BantayLogo size={36} />
         {(!collapsed || isMobile) && (
           <div className="flex-1 min-w-0">
             <div className="font-bold text-lg leading-none text-white">Bantay SP</div>

@@ -1,8 +1,9 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import {
   FileText, CheckCircle, Clock, TrendingUp, Plus,
-  MapPin, Eye, ArrowRight, Users, Shield, Trophy,
+  MapPin, Eye, ArrowRight, Users, Trophy,
   AlertTriangle, Zap,
 } from "lucide-react";
 import {
@@ -27,6 +28,7 @@ import {
   ErrorState,
 } from "../components/ui/DataStates";
 import { useAuth } from "../context/AuthContext";
+import { BantayLogo } from "../components/ui/BantayLogo";
 
 // ─── Status / Priority helpers ────────────────────────────────────────────────
 
@@ -80,8 +82,8 @@ export function DashboardPage() {
         className="rounded-2xl p-6 text-white relative overflow-hidden"
         style={{ backgroundColor: "#800000" }}
       >
-        <div className="absolute right-0 top-0 bottom-0 w-40 opacity-10">
-          <Shield className="w-full h-full" />
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-15 hidden md:block">
+          <BantayLogo size={120} className="rounded-full" />
         </div>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>

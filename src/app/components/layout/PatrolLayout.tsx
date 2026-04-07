@@ -6,7 +6,6 @@ import {
   Map,
   History,
   User,
-  Shield,
   Bell,
   LogOut,
   Radio,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
+import { BantayLogo } from "../ui/BantayLogo";
 
 const patrolNav = [
   { path: "/app/patrol/dashboard", icon: LayoutDashboard, label: "Dashboard", short: "Home" },
@@ -71,9 +71,7 @@ export function PatrolLayout() {
       <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-slate-700/50 shadow-xl" style={{ backgroundColor: "#0d1117" }}>
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-slate-700/50">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#800000" }}>
-            <Shield className="w-5 h-5 text-white" />
-          </div>
+          <BantayLogo size={36} />
           <div>
             <div className="text-white font-bold text-sm leading-none">Bantay SP</div>
             <div className="mt-0.5 flex items-center gap-1">

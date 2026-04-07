@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion } from "motion/react";
-import { Shield, Mail, Lock, Eye, EyeOff, ArrowLeft, Chrome } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, Chrome } from "lucide-react";
 import { useAuth, type UserRole } from "../context/AuthContext";
+import { BantayLogo } from "../components/ui/BantayLogo";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -61,9 +62,7 @@ export function LoginPage() {
             <span className="text-sm">Back to Home</span>
           </button>
           <div className="flex items-center gap-3 mb-10">
-            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
-              <Shield className="w-7 h-7 text-white" />
-            </div>
+            <BantayLogo size={48} />
             <div>
               <div className="text-white font-bold text-2xl">Bantay SP</div>
               <div className="text-white/60 text-sm">Community Safety Platform</div>
@@ -108,9 +107,7 @@ export function LoginPage() {
               <span className="text-sm">Back to Home</span>
             </button>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#800000" }}>
-                <Shield className="w-5 h-5 text-white" />
-              </div>
+              <BantayLogo size={36} />
               <div className="font-bold text-gray-900">Bantay SP</div>
             </div>
           </div>

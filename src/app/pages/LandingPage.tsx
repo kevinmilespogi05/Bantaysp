@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import {
-  Shield,
   MapPin,
   Bell,
   Users,
@@ -17,6 +16,7 @@ import {
   Eye,
   Lock,
 } from "lucide-react";
+import { BantayLogo } from "../components/ui/BantayLogo";
 
 const HERO_BG = "https://images.unsplash.com/photo-1771905603448-14e6c48f7665?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1920";
 
@@ -101,9 +101,7 @@ export function LandingPage() {
       >
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
+            <BantayLogo size={36} />
             <div>
               <div className="font-bold text-white text-lg leading-none">Bantay SP</div>
               <div className="text-white/60" style={{ fontSize: "10px" }}>Castillejos, Zambales</div>
@@ -223,9 +221,7 @@ export function LandingPage() {
                 <div className="flex-1 p-3 space-y-2">
                   <div className="bg-white/20 rounded-2xl p-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: "#800000" }}>
-                        <Shield className="w-3 h-3 text-white" />
-                      </div>
+                      <BantayLogo size={22} />
                       <span className="text-white font-semibold text-sm">Bantay SP</span>
                     </div>
                     <div className="text-white/60 text-xs">Active community protection</div>
@@ -473,7 +469,7 @@ export function LandingPage() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <Shield className="w-14 h-14 text-white/30 mx-auto mb-6" />
+            <BantayLogo size={56} className="mx-auto mb-6 opacity-80" />
             <h2 className="text-white mb-4" style={{ fontSize: "clamp(1.8rem, 3vw, 2.8rem)", fontWeight: 800 }}>
               Ready to Protect Your Community?
             </h2>
@@ -504,9 +500,7 @@ export function LandingPage() {
       <footer className="bg-gray-900 text-white py-10 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#800000" }}>
-              <Shield className="w-4 h-4 text-white" />
-            </div>
+            <BantayLogo size={32} />
             <div>
               <div className="font-bold">Bantay SP</div>
               <div className="text-gray-400" style={{ fontSize: "11px" }}>San Pablo, Castillejos, Zambales</div>

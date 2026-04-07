@@ -1,6 +1,9 @@
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { motion } from "motion/react";
 import {
   Users, FileText, CheckCircle, Clock, TrendingUp, AlertTriangle,
-  MapPin, Shield, Eye, UserCheck, BarChart3, Settings,
+  MapPin, Shield, UserCheck, BarChart3, Settings, Eye,
   Download, Filter, Search, Radio, ChevronDown, MoreHorizontal, type LucideIcon,
 } from "lucide-react";
 import {
@@ -28,7 +31,7 @@ import {
   ErrorState,
 } from "../components/ui/DataStates";
 import { useAuth } from "../context/AuthContext";
-import { useState } from "react";
+import { BantayLogo } from "../components/ui/BantayLogo";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
@@ -100,9 +103,7 @@ export function AdminDashboard() {
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#800000" }}>
-            <Shield className="w-5 h-5 text-white" />
-          </div>
+          <BantayLogo size={40} />
           <div>
             <h2 className="font-bold text-gray-900">Admin Dashboard</h2>
             <p className="text-gray-400 text-sm">System overview · San Pablo, Castillejos</p>

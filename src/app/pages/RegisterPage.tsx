@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Shield, Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin } from "lucide-react";
+import { BantayLogo } from "../components/ui/BantayLogo";
 
 const steps = [
   { id: 1, label: "Personal Info", icon: User },
@@ -63,9 +64,7 @@ export function RegisterPage() {
           </button>
 
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
-              <Shield className="w-7 h-7 text-white" />
-            </div>
+            <BantayLogo size={48} />
             <div>
               <div className="text-white font-bold text-xl">Bantay SP</div>
               <div className="text-white/60 text-sm">Community Safety Platform</div>
@@ -112,9 +111,7 @@ export function RegisterPage() {
               <span className="text-sm">Back</span>
             </button>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#800000" }}>
-                <Shield className="w-4 h-4 text-white" />
-              </div>
+              <BantayLogo size={32} />
               <div className="font-bold text-gray-900">Bantay SP</div>
             </div>
             {/* Mobile step progress */}
