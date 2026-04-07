@@ -1,0 +1,40 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+@import 'leaflet/dist/leaflet.css';
+
+/* Leaflet marker pulse animation */
+@keyframes leaflet-ping {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  70% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Ensure Leaflet map tiles render above other elements */
+.leaflet-pane { z-index: 400 !important; }
+.leaflet-overlay-pane { z-index: 410 !important; }
+.leaflet-marker-pane { z-index: 420 !important; }
+.leaflet-tooltip-pane { z-index: 430 !important; }
+.leaflet-popup-pane { z-index: 440 !important; }
+.leaflet-top, .leaflet-bottom { z-index: 450 !important; }
+
+/* Dark-themed Leaflet popups for Bantay SP */
+.bantay-popup .leaflet-popup-content-wrapper {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+.bantay-popup .leaflet-popup-tip-container {
+  display: none;
+}
+.bantay-popup .leaflet-popup-content {
+  margin: 0;
+}
+
+/* Transparent popup wrapper for dark map markers */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+}
