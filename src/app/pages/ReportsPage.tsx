@@ -36,12 +36,6 @@ const statusConfig: Record<string, { bg: string; text: string; icon: React.Eleme
   rejected:    { bg: "bg-purple-100", text: "text-purple-700", icon: AlertCircle, label: "Rejected" },
 };
 
-const priorityConfig: Record<string, { dot: string; badge: string; label: string }> = {
-  high:   { dot: "#ef4444", badge: "bg-red-100 text-red-700",     label: "High" },
-  medium: { dot: "#f59e0b", badge: "bg-amber-100 text-amber-700", label: "Medium" },
-  low:    { dot: "#22c55e", badge: "bg-green-100 text-green-700", label: "Low" },
-};
-
 const REPORT_CATEGORIES = [
   "All Categories", "Suspicious Activity", "Infrastructure",
   "Environmental", "Public Disturbance", "Natural Disaster",
@@ -305,7 +299,6 @@ export function ReportsPage() {
           <AnimatePresence>
             {filtered.map((report, i) => {
               const status = statusConfig[report.status];
-              const priority = priorityConfig[report.priority];
               const StatusIcon = status.icon;
               const isUpvoted = upvoted.has(report.id);
 
@@ -332,7 +325,6 @@ export function ReportsPage() {
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priority.dot }} />
                         <span className="text-gray-400 text-xs font-medium">{report.id}</span>
                       </div>
                       <span className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
@@ -346,7 +338,6 @@ export function ReportsPage() {
 
                     <div className="flex items-center gap-1.5 mb-2">
                       <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 text-xs">{report.category}</span>
-                      <span className={`px-2 py-0.5 rounded-lg text-xs ${priority.badge}`}>{priority.label}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 text-gray-400 text-xs mb-3">
@@ -429,9 +420,6 @@ export function ReportsPage() {
                         Verified
                       </span>
                     )}
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${priorityConfig[selectedReport.priority].badge}`}>
-                      {priorityConfig[selectedReport.priority].label} Priority
-                    </span>
                   </div>
 
                   <div className="space-y-3 mb-5">

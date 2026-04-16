@@ -131,7 +131,6 @@ export interface Report {
   title: string;
   category: string;
   status: "pending_verification" | "approved" | "rejected" | "in_progress" | "resolved" | "accepted";
-  priority: "high" | "medium" | "low";
   location: string;
   timestamp: string;
   reporter: string;
@@ -520,13 +519,12 @@ export async function updateReportStatus(
   data: {
     status?: "pending" | "accepted" | "in_progress" | "resolved" | "rejected";
     verified?: boolean;
-    priority?: "low" | "medium" | "high";
   }
 ): Promise<ApiResponse<Report>> {
   return apiFetch<Report>(`/reports/${id}`, { method: "PUT", body: JSON.stringify(data) }, true);
 }
 
-/** Update a report (status, priority, etc.) */
+/** Update a report (status, etc.) */
 export async function updateReport(
   id: string,
   data: Partial<Report>

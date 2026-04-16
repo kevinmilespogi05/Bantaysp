@@ -830,9 +830,9 @@ app.get("/reports", async (req, res) => {
 /** POST /reports - Create a new report */
 app.post("/reports", async (req, res) => {
   try {
-    const { title, description, category, priority, location, image_url, location_lat, location_lng } = req.body;
+    const { title, description, category, location, image_url, location_lat, location_lng } = req.body;
 
-    // Validate required fields (priority is optional - defaults to "medium")
+    // Validate required fields
     if (!title || !description || !category || !location) {
       return res.status(400).json({
         error: "Missing required fields: title, description, category, location",
@@ -846,9 +846,6 @@ app.post("/reports", async (req, res) => {
     if (description.length < 10) {
       return res.status(400).json({ error: "Description must be at least 10 characters long" });
     }
-
-    // Set default priority if not provided
-    const finalPriority = priority || "medium";
 
     // Extract and verify access token
     const authHeader = req.headers.authorization || "";
@@ -953,7 +950,6 @@ app.post("/reports", async (req, res) => {
           title,
           description,
           category,
-          priority: finalPriority,
           location,
           location_lat: finalLat,
           location_lng: finalLng,
@@ -1967,7 +1963,7 @@ app.get("/admin/reports/pending", async (req, res) => {
 
     const { data: pendingReports, error } = await supabase
       .from("reports")
-      .select("id, title, description, category, priority, location, status, reporter, avatar, image_url, created_at, comments, upvotes, user_id, admin_notes")
+      .select("id, title, description, category, location, status, reporter, avatar, image_url, created_at, comments, upvotes, user_id, admin_notes")
       .eq("status", "pending_verification")
       .order("created_at", { ascending: true });
 
