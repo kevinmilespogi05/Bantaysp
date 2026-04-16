@@ -832,10 +832,10 @@ app.post("/reports", async (req, res) => {
   try {
     const { title, description, category, priority, location, image_url, location_lat, location_lng } = req.body;
 
-    // Validate required fields
-    if (!title || !description || !category || !priority || !location) {
+    // Validate required fields (priority is optional - defaults to "medium")
+    if (!title || !description || !category || !location) {
       return res.status(400).json({
-        error: "Missing required fields: title, description, category, priority, location",
+        error: "Missing required fields: title, description, category, location",
       });
     }
 
@@ -846,6 +846,9 @@ app.post("/reports", async (req, res) => {
     if (description.length < 10) {
       return res.status(400).json({ error: "Description must be at least 10 characters long" });
     }
+
+    // Set default priority if not provided
+    const finalPriority = priority || "medium";
 
     // Extract and verify access token
     const authHeader = req.headers.authorization || "";
@@ -950,7 +953,7 @@ app.post("/reports", async (req, res) => {
           title,
           description,
           category,
-          priority,
+          priority: finalPriority,
           location,
           location_lat: finalLat,
           location_lng: finalLng,
