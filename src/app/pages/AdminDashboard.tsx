@@ -84,6 +84,8 @@ export function AdminDashboard() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [pendingRejectReportId, setPendingRejectReportId] = useState<string | null>(null);
+  const [pendingReportDetailOpen, setPendingReportDetailOpen] = useState(false);
+  const [selectedPendingReport, setSelectedPendingReport] = useState<any>(null);
   
   // Patrol promotion modal state
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
@@ -738,7 +740,11 @@ export function AdminDashboard() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.03 }}
-                      className="hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        setSelectedPendingReport(r);
+                        setPendingReportDetailOpen(true);
+                      }}
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
                     >
                       <td className="px-5 py-3.5 text-gray-500 text-sm font-mono">{r.id}</td>
                       <td className="px-5 py-3.5">
@@ -831,6 +837,137 @@ export function AdminDashboard() {
               >
                 Reject Report
               </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Pending Report Detail Modal */}
+      {pendingReportDetailOpen && selectedPendingReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900 text-lg">{selectedPendingReport.title}</h2>
+              <button
+                onClick={() => {
+                  setPendingReportDetailOpen(false);
+                  setSelectedPendingReport(null);
+                }}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-4 space-y-4">
+              {/* Report ID & Meta */}
+              <div className="flex flex-wrap gap-4 text-sm">
+                <div>
+                  <span className="text-gray-400">Report ID:</span>
+                  <p className="font-mono text-gray-700">{selectedPendingReport.id}</p>
+                </div>
+                <div>
+                  <span className="text-gray-400">Status:</span>
+                  <p className="text-amber-700 font-medium">Pending Verification</p>
+                </div>
+                <div>
+                  <span className="text-gray-400">Created:</span>
+                  <p className="text-gray-700">{new Date(selectedPendingReport.created_at || selectedPendingReport.timestamp).toLocaleString("en-PH", { dateStyle: "long", timeStyle: "short" })}</p>
+                </div>
+              </div>
+
+              {/* Category & Location */}
+              <div className="flex gap-4">
+                <div>
+                  <span className="text-gray-400 text-sm">Category</span>
+                  <p className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg inline-block text-sm font-medium mt-1">{selectedPendingReport.category}</p>
+                </div>
+                <div className="flex-1">
+                  <span className="text-gray-400 text-sm flex items-center gap-1">
+                    <MapPin className="w-4 h-4" /> Location
+                  </span>
+                  <p className="text-gray-700 mt-1">{selectedPendingReport.location}</p>
+                </div>
+              </div>
+
+              {/* Reporter Info */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-gray-400 text-sm mb-2">Reported by</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
+                    {selectedPendingReport.avatar || "A"}
+                  </div>
+                  <div>
+                    <p className="text-gray-900 font-medium text-sm">{selectedPendingReport.reporter}</p>
+                    {selectedPendingReport.user_id && <p className="text-gray-400 text-xs">{selectedPendingReport.user_id}</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <p className="text-gray-400 text-sm mb-2">Description</p>
+                <div className="bg-gray-50 rounded-lg p-4 text-gray-700 text-sm leading-relaxed">
+                  {selectedPendingReport.description}
+                </div>
+              </div>
+
+              {/* Image */}
+              {selectedPendingReport.image_url && (
+                <div>
+                  <p className="text-gray-400 text-sm mb-2">Image</p>
+                  <img src={selectedPendingReport.image_url} alt={selectedPendingReport.title} className="w-full rounded-lg max-h-96 object-cover" />
+                </div>
+              )}
+
+              {/* Admin Notes */}
+              {selectedPendingReport.admin_notes && (
+                <div>
+                  <p className="text-gray-400 text-sm mb-2">Admin Notes</p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-gray-700 text-sm">
+                    {selectedPendingReport.admin_notes}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    handleApprovePendingReport(selectedPendingReport.id);
+                    setPendingReportDetailOpen(false);
+                  }}
+                  disabled={processingReportId === selectedPendingReport.id}
+                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                    processingReportId === selectedPendingReport.id
+                      ? "opacity-50 cursor-not-allowed"
+                      : "bg-green-100 text-green-700 hover:bg-green-200"
+                  }`}
+                >
+                  ✓ Approve Report
+                </button>
+                <button
+                  onClick={() => {
+                    setPendingRejectReportId(selectedPendingReport.id);
+                    setShowRejectModal(true);
+                    setPendingReportDetailOpen(false);
+                  }}
+                  disabled={processingReportId === selectedPendingReport.id}
+                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                    processingReportId === selectedPendingReport.id
+                      ? "opacity-50 cursor-not-allowed"
+                      : "bg-red-100 text-red-700 hover:bg-red-200"
+                  }`}
+                >
+                  ✗ Reject Report
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>
