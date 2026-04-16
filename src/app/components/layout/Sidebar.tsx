@@ -62,6 +62,7 @@ const adminNav: NavItem[] = [
   { path: "/app/announcements",             icon: Megaphone,   label: "Announcements" },
   { path: "/app/admin", search: "?tab=users",        icon: Users,       label: "Users & ID" },
   { path: "/app/admin", search: "?tab=verification", icon: UserCheck,   label: "Verification" },
+  { path: "/app/admin/chat",                icon: MessageSquare, label: "User Messages" },
   {
     path: "/app/admin/patrol-monitoring",
     icon: Radio,
@@ -247,7 +248,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             <div className="flex items-center gap-2">
               <span className="text-sm">{roleInfo.emoji}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-white/90 text-xs font-semibold truncate">{user.name}</div>
+                <div className="text-white/90 text-xs font-semibold truncate">{user.first_name} {user.last_name}</div>
                 <div className="text-white/50" style={{ fontSize: "10px" }}>
                   {roleInfo.label} · {user.barangay}
                 </div>
@@ -289,25 +290,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           );
         })}
 
-        {/* Admin-only: Patrol Mode Launch */}
-        {isAdmin && (!collapsed || isMobile) && (
-          <>
-            <div className="my-2 border-t border-white/10" />
-            <button
-              onClick={() => {
-                navigate("/app/patrol/dashboard");
-                if (isMobile) onMobileClose?.();
-              }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-all"
-            >
-              <MapPin className="w-5 h-5 shrink-0" />
-              <span className="text-sm font-medium">Patrol Mode</span>
-              <span className="ml-auto text-xs bg-white/15 px-1.5 py-0.5 rounded-md shrink-0">
-                Launch
-              </span>
-            </button>
-          </>
-        )}
+
       </nav>
 
       {/* ── Footer ── */}
@@ -322,9 +305,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
               {user.avatar}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">{user.name}</div>
+              <div className="text-sm font-medium text-white truncate">{user.first_name} {user.last_name}</div>
               <div className="text-white/50 truncate" style={{ fontSize: "11px" }}>
-                {user.email}
+                {user.barangay}
               </div>
             </div>
           </div>

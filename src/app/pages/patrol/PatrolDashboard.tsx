@@ -5,10 +5,10 @@ import {
   AlertTriangle, MapPin, Clock, User, CheckCircle, XCircle,
   Navigation, Zap, Shield, Activity, TrendingUp, Star,
   ChevronRight, Camera, FileText, Phone, Radio, Target,
-  ClipboardList, ArrowRight,
+  ClipboardList, ArrowRight, LogOut,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { useApi, fetchActiveCase, fetchAssignedReports, fetchPatrolStats, fetchPatrolHistory } from "../../services/api";
+import { useApi, fetchActiveCase, fetchAssignedReports, fetchPatrolStats, fetchPatrolHistory, cancelPatrolCase } from "../../services/api";
 import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataStates";
 
 type CaseStatus = "assigned" | "accepted" | "in_progress" | "resolving" | "resolved";
@@ -40,15 +40,16 @@ function timeAgo(dateStr: string) {
 export function PatrolDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [caseStatus, setCaseStatus] = useState<CaseStatus>("assigned");
+  const [caseStatus, setCaseStatus] = useState<CaseStatus>("accepted");
   const [showResolution, setShowResolution] = useState(false);
   const [resNotes, setResNotes] = useState("");
   const [photoUploaded, setPhotoUploaded] = useState(false);
   const [showDeclineConfirm, setShowDeclineConfirm] = useState(false);
   const [declined, setDeclined] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // ── Data from API service ─────────────────────────────────────────────────
-  const { data: activeCase, loading: caseLoading } = useApi(fetchActiveCase);
+  const { data: activeCase, loading: caseLoading } = useApi(() => fetchActiveCase(user.id));
   const { data: assignedReports, loading: assignedLoading } = useApi(fetchAssignedReports);
   const { data: patrolStats, loading: statsLoading } = useApi(fetchPatrolStats);
   const { data: patrolHistory, loading: historyLoading } = useApi(fetchPatrolHistory);
@@ -92,15 +93,47 @@ export function PatrolDashboard() {
           <span className="text-slate-600 text-xs">·</span>
           <span className="text-slate-400 text-xs">{user.badgeNumber}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Radio className="w-3.5 h-3.5 text-blue-400" />
-          <span className="text-slate-400 text-xs">Shift: {user.shiftStart}–{user.shiftEnd}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Radio className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-slate-400 text-xs">Shift: {user.shiftStart}–{user.shiftEnd}</span>
+          </div>
+          <button
+            onClick={() => navigate("/app/dashboard")}
+            className="flex items-center gap-2 ml-2 px-3 py-1.5 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 hover:text-slate-100 text-xs font-medium transition-all border border-slate-600 hover:border-slate-500"
+            title="End shift and return home"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">End Shift</span>
+          </button>
         </div>
       </motion.div>
 
       {/* ── ACTIVE CASE CARD ─────────────────────────────────── */}
       <AnimatePresence mode="wait">
-        {!declined ? (
+        {declined ? (
+          /* Declined State */
+          <motion.div
+            key="declined"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-slate-700 p-6 text-center"
+            style={{ backgroundColor: "#161b22" }}
+          >
+            <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center mx-auto mb-3">
+              <XCircle className="w-6 h-6 text-slate-400" />
+            </div>
+            <h3 className="text-slate-300 font-semibold mb-1">Case Declined</h3>
+            <p className="text-slate-500 text-sm mb-4">Case returned to dispatch queue.</p>
+            <button
+              onClick={() => navigate("/app/patrol/assigned")}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors"
+              style={{ backgroundColor: "#800000" }}
+            >
+              View Assigned Queue
+            </button>
+          </motion.div>
+        ) : activeCase ? (
           <motion.div
             key="active-case"
             initial={{ opacity: 0, y: 20 }}
@@ -239,10 +272,37 @@ export function PatrolDashboard() {
                           <Zap className="w-4 h-4" /> Mark In Progress
                         </button>
                         <button
-                          onClick={() => {}}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/20 text-white/60 hover:text-white text-sm transition-all"
+                          onClick={async () => {
+                            if (!activeCase?.id) return;
+                            setCancelLoading(true);
+                            try {
+                              const response = await cancelPatrolCase(activeCase.id, user.id);
+                              if (response.error) {
+                                console.error("[PatrolDashboard] Cancel failed:", response.error);
+                              } else {
+                                setDeclined(true);
+                                setCaseStatus("assigned");
+                                console.log("[PatrolDashboard] ✅ Case canceled");
+                              }
+                            } catch (err) {
+                              console.error("[PatrolDashboard] Cancel error:", err);
+                            } finally {
+                              setCancelLoading(false);
+                            }
+                          }}
+                          disabled={cancelLoading}
+                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-red-500/50 text-red-400 hover:text-red-300 hover:border-red-400 text-sm transition-all disabled:opacity-50"
                         >
-                          <Phone className="w-4 h-4" /> Call Reporter
+                          {cancelLoading ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />
+                              Canceling...
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-4 h-4" /> Cancel
+                            </>
+                          )}
                         </button>
                       </>
                     )}
@@ -304,30 +364,31 @@ export function PatrolDashboard() {
               </motion.div>
             )}
           </motion.div>
-        ) : (
-          /* Declined State */
-          <motion.div
-            key="declined"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl border border-slate-700 p-6 text-center"
-            style={{ backgroundColor: "#161b22" }}
-          >
-            <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center mx-auto mb-3">
-              <XCircle className="w-6 h-6 text-slate-400" />
-            </div>
-            <h3 className="text-slate-300 font-semibold mb-1">Case Declined</h3>
-            <p className="text-slate-500 text-sm mb-4">Case returned to dispatch queue.</p>
-            <button
-              onClick={() => navigate("/app/patrol/assigned")}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors"
-              style={{ backgroundColor: "#800000" }}
-            >
-              View Assigned Queue
-            </button>
-          </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
+
+      {/* ── No Active Case State ─────────────────────────── */}
+      {!declined && !activeCase && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-slate-700 p-6 text-center"
+          style={{ backgroundColor: "#161b22" }}
+        >
+          <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center mx-auto mb-3">
+            <CheckCircle className="w-6 h-6 text-slate-400" />
+          </div>
+          <h3 className="text-slate-300 font-semibold mb-1">No Active Case</h3>
+          <p className="text-slate-500 text-sm mb-4">You don't have any active cases assigned. Check the queue to accept new cases.</p>
+          <button
+            onClick={() => navigate("/app/patrol/assigned")}
+            className="px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors"
+            style={{ backgroundColor: "#1d4ed8" }}
+          >
+            View Available Cases
+          </button>
+        </motion.div>
+      )}
 
       {/* ── Stats Row ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

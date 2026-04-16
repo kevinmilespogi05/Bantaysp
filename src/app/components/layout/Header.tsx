@@ -42,14 +42,11 @@ const roleStyle = {
   patrol: { bg: "#06573015", border: "#06573030", text: "#16a34a", label: "Patrol", emoji: "👮" },
 };
 
-// ─── Static mock notifications (replace with API call in production) ─────────
 
-const INITIAL_NOTIFICATIONS = [
-  { id: 1, type: "success", message: "Your report RPT-003 has been resolved.", time: "2 min ago", read: false },
-  { id: 2, type: "info", message: "New announcement: Typhoon Preparedness Advisory", time: "1 hour ago", read: false },
-  { id: 3, type: "warning", message: "Report RPT-001 requires additional information.", time: "3 hours ago", read: true },
-  { id: 4, type: "success", message: "You earned the Gold Reporter badge!", time: "Yesterday", read: true },
-];
+// ─── Notifications (fetched from API) ─────────────────────────────────────    
+
+const INITIAL_NOTIFICATIONS: Array<{id: number; type: string; message: string; time: string; read: boolean}> = [];
+
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -245,7 +242,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
             >
               {/* User Info */}
               <div className="px-4 py-2 border-b border-gray-100 mb-1">
-                <div className="text-sm font-semibold text-gray-900">{user.name}</div>
+                <div className="text-sm font-semibold text-gray-900">{user.first_name} {user.last_name}</div>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="text-xs">{rStyle.emoji}</span>
                   <div className="text-gray-400" style={{ fontSize: "11px" }}>
@@ -253,7 +250,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
                   </div>
                 </div>
                 <div className="text-gray-400 truncate mt-0.5" style={{ fontSize: "11px" }}>
-                  {user.email}
+                  {user.barangay}
                 </div>
               </div>
 

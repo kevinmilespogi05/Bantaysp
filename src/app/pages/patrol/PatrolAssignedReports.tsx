@@ -1,14 +1,24 @@
-import { useApi, fetchActiveCase, fetchAssignedReports } from "../../services/api";
+/**
+ * PatrolAssignedReports — Split view for admin-assigned and available reports
+ *
+ * Displays two queues:
+ * 1. Admin-Assigned: Reports explicitly assigned by admins (need acceptance)
+ * 2. Available: Unassigned reports patrol officer can self-assign
+ */
+
+import { useApi, fetchAdminAssignedReports, fetchAvailableReports } from "../../services/api";
 import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataStates";
 import { useNavigate } from "react-router";
 import { useState } from "react";
 import { motion } from "motion/react";
+import { useAuth } from "../../context/AuthContext";
 import {
   MapPin, Clock, ChevronRight, Filter, Search,
-  AlertTriangle, ArrowUpDown, Navigation, Zap,
+  AlertTriangle, ArrowUpDown, Navigation, Zap, Check,
 } from "lucide-react";
 
 type Priority = "all" | "critical" | "high" | "medium" | "low";
+type QueueTab = "assigned" | "available";
 
 const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -36,21 +46,39 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(diff / 60)}h ${Math.floor(diff % 60)}m ago`;
 }
 
+interface ReportCard {
+  id: string;
+  title: string;
+  category: string;
+  priority: "critical" | "high" | "medium" | "low";
+  location: string;
+  distance: string;
+  timeReported: string;
+  reporter: string;
+  reporterAvatar: string;
+  description: string;
+  acceptedBy?: string;
+  status?: string;
+}
+
 export function PatrolAssignedReports() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<QueueTab>("assigned");
   const [filter, setFilter] = useState<Priority>("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"distance" | "priority" | "time">("priority");
 
-  const { data: activeCase, loading: activeCaseLoading } = useApi(fetchActiveCase);
-  const { data: assignedReports, loading: assignedLoading } = useApi(fetchAssignedReports);
+  // Fetch both queues
+  const { data: adminAssigned, loading: adminLoading } = useApi(() => 
+    fetchAdminAssignedReports(user.id)
+  );
+  const { data: availableReports, loading: availableLoading } = useApi(fetchAvailableReports);
 
-  const allCases = [
-    ...(activeCase ? [{ ...activeCase, status: "active" as const }] : []),
-    ...(assignedReports ?? []),
-  ];
+  const currentQueue = activeTab === "assigned" ? (adminAssigned ?? []) : (availableReports ?? []);
+  const isLoading = activeTab === "assigned" ? adminLoading : availableLoading;
 
-  const filtered = allCases
+  const filtered = currentQueue
     .filter((r) => filter === "all" || r.priority === filter)
     .filter((r) =>
       search === "" ||
@@ -66,6 +94,90 @@ export function PatrolAssignedReports() {
       return new Date(b.timeReported).getTime() - new Date(a.timeReported).getTime();
     });
 
+  const renderReportCard = (r: ReportCard, actionType: "admin" | "available") => {
+    const pCfg = priorityConfig[r.priority] ?? priorityConfig.medium;
+    const catColor = categoryColors[r.category] ?? "#6b7280";
+
+    return (
+      <motion.div
+        key={r.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        onClick={() => navigate(`/app/patrol/case/${r.id}`)}
+        className="rounded-2xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] overflow-hidden border-slate-700/50 hover:border-slate-600"
+        style={{ backgroundColor: "#161b22" }}
+      >
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${pCfg.bg}`}>
+                  {pCfg.label}
+                </span>
+                <span className="text-slate-500 text-xs">{r.id}</span>
+              </div>
+              <h3 className="text-white font-semibold text-sm leading-tight">{r.title}</h3>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
+          </div>
+
+          {/* Category + Location */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
+            <span className="text-slate-400 text-xs">{r.category}</span>
+          </div>
+          <div className="flex items-center gap-1.5 mb-3">
+            <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="text-slate-400 text-xs truncate">{r.location}</span>
+          </div>
+
+          {/* Status Badge */}
+          {r.acceptedBy && (
+            <div className="mb-2 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-500/20 border border-blue-500/40 w-fit">
+              <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-bold bg-blue-600">
+                {r.acceptedBy.substring(0, 2).toUpperCase()}
+              </div>
+              <span className="text-blue-300 text-xs font-medium">Accepted by {r.acceptedBy}</span>
+            </div>
+          )}
+
+          {/* Bottom Row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-blue-400 text-xs font-medium">{r.distance}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-slate-500 text-xs">{timeAgo(r.timeReported)}</span>
+              </div>
+            </div>
+            {actionType === "admin" ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate(`/app/patrol/case/${r.id}?action=accept`); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+                title="Accept admin assignment"
+              >
+                <Check className="w-3 h-3" /> Accept
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate(`/app/patrol/case/${r.id}?action=self-assign`); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors"
+                title="Self-assign this report"
+              >
+                <Zap className="w-3 h-3" /> Self-Assign
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
+
+
   return (
     <div className="p-4 md:p-5 space-y-4 pb-24 md:pb-6">
       {/* Header Banner */}
@@ -77,21 +189,42 @@ export function PatrolAssignedReports() {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-white font-bold text-base">Assigned Case Queue</h2>
+            <h2 className="text-white font-bold text-base">Report Queues</h2>
             <p className="text-slate-400 text-xs mt-0.5">
-              {allCases.length} cases · Sorted by {sortBy}
+              {adminAssigned?.length ?? 0} admin-assigned · {availableReports?.length ?? 0} available
             </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="px-2.5 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: "#800000" }}>
-              {allCases.length} Total
-            </div>
-            <div className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-              1 Active
+              {(adminAssigned?.length ?? 0) + (availableReports?.length ?? 0)} Total
             </div>
           </div>
         </div>
       </motion.div>
+
+      {/* Queue Tabs */}
+      <div className="flex gap-2 border-b border-slate-700">
+        <button
+          onClick={() => { setActiveTab("assigned"); setFilter("all"); setSearch(""); }}
+          className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
+            activeTab === "assigned"
+              ? "border-blue-500 text-blue-400"
+              : "border-transparent text-slate-500 hover:text-slate-400"
+          }`}
+        >
+          Admin-Assigned ({adminAssigned?.length ?? 0})
+        </button>
+        <button
+          onClick={() => { setActiveTab("available"); setFilter("all"); setSearch(""); }}
+          className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
+            activeTab === "available"
+              ? "border-green-500 text-green-400"
+              : "border-transparent text-slate-500 hover:text-slate-400"
+          }`}
+        >
+          Available to Self-Assign ({availableReports?.length ?? 0})
+        </button>
+      </div>
 
       {/* Search + Sort */}
       <div className="flex gap-2">
@@ -100,7 +233,7 @@ export function PatrolAssignedReports() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cases..."
+            placeholder="Search reports..."
             className="bg-transparent text-sm text-slate-300 placeholder-slate-600 outline-none w-full"
           />
         </div>
@@ -127,107 +260,40 @@ export function PatrolAssignedReports() {
             }`}
             style={filter === p ? { backgroundColor: p === "all" ? "#800000" : priorityConfig[p]?.color ?? "#800000" } : {}}
           >
-            {p === "all" ? "All Cases" : priorityConfig[p].label}
+            {p === "all" ? "All" : priorityConfig[p].label}
           </button>
         ))}
       </div>
 
-      {/* Case List */}
-      <div className="space-y-3">
-        {filtered.map((r, i) => {
-          const isActive = r.status === "active";
-          const pCfg = priorityConfig[r.priority] ?? priorityConfig.medium;
-          const catColor = categoryColors[r.category] ?? "#6b7280";
+      {/* Reports List */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <PatrolSkeletonCard key={i} />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((r) => 
+            renderReportCard(r, activeTab === "assigned" ? "admin" : "available")
+          )}
+        </div>
+      )}
 
-          return (
-            <motion.div
-              key={r.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-              onClick={() => {
-                if (isActive) navigate("/app/patrol/dashboard");
-                else navigate(`/app/patrol/case/${r.id}`);
-              }}
-              className={`rounded-2xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] overflow-hidden ${
-                isActive ? "border-red-500/50" : "border-slate-700/50 hover:border-slate-600"
-              }`}
-              style={{ backgroundColor: isActive ? "#1a0a0a" : "#161b22", boxShadow: isActive ? "0 0 20px rgba(239,68,68,0.15)" : "none" }}
-            >
-              {/* Active Case Strip */}
-              {isActive && (
-                <div className="flex items-center gap-2 px-4 py-1.5 border-b border-red-500/30" style={{ backgroundColor: "#7f1d1d" }}>
-                  <AlertTriangle className="w-3 h-3 text-red-300 animate-pulse" />
-                  <span className="text-red-200 text-xs font-bold tracking-wider">ACTIVE — CURRENTLY ASSIGNED</span>
-                </div>
-              )}
-
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${pCfg.bg}`}>
-                        {pCfg.label}
-                      </span>
-                      <span className="text-slate-500 text-xs">{r.id}</span>
-                    </div>
-                    <h3 className="text-white font-semibold text-sm leading-tight">{r.title}</h3>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
-                </div>
-
-                {/* Category + Location */}
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
-                  <span className="text-slate-400 text-xs">{r.category}</span>
-                </div>
-                <div className="flex items-center gap-1.5 mb-3">
-                  <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  <span className="text-slate-400 text-xs truncate">{r.location}</span>
-                </div>
-
-                {/* Bottom Row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <Navigation className="w-3.5 h-3.5 text-blue-400" />
-                      <span className="text-blue-400 text-xs font-medium">{r.distance}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="text-slate-500 text-xs">{timeAgo(r.timeReported)}</span>
-                    </div>
-                  </div>
-                  {isActive ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate("/app/patrol/dashboard"); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-colors"
-                    >
-                      <Zap className="w-3 h-3" /> Handle Now
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/app/patrol/case/${r.id}`); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition-colors"
-                    >
-                      View Details
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {filtered.length === 0 && (
+      {!isLoading && filtered.length === 0 && (
         <div className="text-center py-12">
           <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-3">
             <Filter className="w-6 h-6 text-slate-600" />
           </div>
-          <p className="text-slate-400 text-sm">No cases match your filter</p>
+          <p className="text-slate-400 text-sm">
+            {activeTab === "assigned" 
+              ? "No admin-assigned reports yet" 
+              : "No available reports to self-assign"}
+          </p>
         </div>
       )}
     </div>
   );
 }
+
+export default PatrolAssignedReports;

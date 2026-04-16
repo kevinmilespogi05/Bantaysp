@@ -11,6 +11,7 @@ import {
   type Announcement,
 } from "../services/api";
 import { SkeletonCard, EmptyState, ErrorState } from "../components/ui/DataStates";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,9 @@ export function AnnouncementsPage() {
     title: "", content: "", category: "Advisory", urgent: false, pinned: false,
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -63,6 +66,7 @@ export function AnnouncementsPage() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
 
@@ -71,15 +75,29 @@ export function AnnouncementsPage() {
     setCreating(true);
     setCreateError(null);
 
+    let imageUrl: string | null = null;
+    if (imageFile) {
+      setUploadingImage(true);
+      const uploadResult = await uploadToCloudinary(imageFile);
+      setUploadingImage(false);
+
+      if (!uploadResult.success) {
+        setCreateError(uploadResult.error);
+        setCreating(false);
+        return;
+      }
+      imageUrl = uploadResult.url;
+    }
+
     const { data, error: apiErr } = await createAnnouncement({
       title: createForm.title.trim(),
       content: createForm.content.trim(),
       category: createForm.category,
-      author: user.name,
-      authorRole: user.role === "admin" ? "Administrator" : "Official",
+      author: `${user.first_name} ${user.last_name}`,
+      author_role: user.role === "admin" ? "Administrator" : "Official",
       pinned: createForm.pinned,
       urgent: createForm.urgent,
-      image: imagePreview,
+      image: imageUrl,
     });
 
     if (apiErr || !data) {
@@ -91,6 +109,7 @@ export function AnnouncementsPage() {
     refetch();
     setCreateForm({ title: "", content: "", category: "Advisory", urgent: false, pinned: false });
     setImagePreview(null);
+    setImageFile(null);
     setCreating(false);
     setShowCreate(false);
   };
@@ -106,16 +125,16 @@ export function AnnouncementsPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#800000" }}>
-            <Megaphone className="w-5 h-5 text-white" />
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-md" style={{ backgroundColor: "#800000" }}>
+            <Megaphone className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h2 className="font-semibold text-gray-900">Announcements</h2>
-            <p className="text-gray-400 text-sm">Official barangay updates · San Pablo</p>
+            <h1 className="font-bold text-gray-900" style={{ fontSize: "1.5rem" }}>Announcements</h1>
+            <p className="text-gray-500 text-sm">Official barangay updates from San Pablo</p>
           </div>
         </div>
         {isAdmin && (
@@ -130,25 +149,27 @@ export function AnnouncementsPage() {
       </div>
 
       {/* Search + Filter bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      <div className="flex flex-col gap-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search announcements..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 outline-none"
+            className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 placeholder-gray-400 outline-none transition-all focus:border-gray-300 focus:shadow-md"
             onFocus={(e) => (e.target.style.borderColor = "#800000")}
             onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
           />
         </div>
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
               onClick={() => setFilter(cat)}
-              className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all min-h-[44px] border ${
-                filter === cat ? "text-white border-transparent" : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all min-h-[40px] border ${
+                filter === cat 
+                  ? "text-white border-transparent shadow-md" 
+                  : "bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:shadow-sm"
               }`}
               style={filter === cat ? { backgroundColor: "#800000" } : {}}
             >
@@ -187,13 +208,15 @@ export function AnnouncementsPage() {
           }
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {/* Pinned */}
           {pinned.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <Pin className="w-4 h-4" style={{ color: "#800000" }} />
-                <span className="text-sm font-semibold text-gray-600">Pinned</span>
+                <div className="flex items-center justify-center w-6 h-6 rounded-lg" style={{ backgroundColor: "#800000" }}>
+                  <Pin className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="text-sm font-bold text-gray-700">Pinned Announcements</span>
               </div>
               {pinned.map((a, i) => (
                 <AnnouncementCard key={a.id} announcement={a} index={i} onClick={() => setSelected(a)} />
@@ -203,11 +226,13 @@ export function AnnouncementsPage() {
 
           {/* Regular */}
           {regular.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {pinned.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-semibold text-gray-500">All Announcements</span>
+                  <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-gray-200">
+                    <Bell className="w-3.5 h-3.5 text-gray-600" />
+                  </div>
+                  <span className="text-sm font-bold text-gray-700">All Announcements</span>
                 </div>
               )}
               {regular.map((a, i) => (
@@ -224,65 +249,141 @@ export function AnnouncementsPage() {
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-40"
+              className="fixed inset-0 w-screen h-screen bg-black/30 backdrop-blur-sm z-40"
               onClick={() => setSelected(null)}
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.9, y: 40 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-xl mx-auto bg-white rounded-2xl shadow-2xl z-50 overflow-hidden max-h-[85vh] flex flex-col"
+              exit={{ opacity: 0, scale: 0.9, y: 40 }}
+              transition={{ type: "spring", damping: 28, stiffness: 350 }}
+              className="fixed inset-x-3 sm:inset-x-4 top-1/2 -translate-y-1/2 max-w-3xl mx-auto bg-white rounded-3xl shadow-2xl z-50 overflow-hidden max-h-[92vh] flex flex-col"
             >
+              {/* Hero Image */}
               {selected.image && (
-                <div className="h-52 shrink-0 overflow-hidden relative">
+                <div className="h-80 shrink-0 overflow-hidden relative bg-gradient-to-b from-gray-300 via-gray-200 to-gray-100">
                   <img src={selected.image} alt={selected.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                  {selected.urgent && (
-                    <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-red-500 text-white px-2.5 py-1 rounded-full text-xs font-bold">
-                      <AlertTriangle className="w-3 h-3" /> URGENT
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                  
+                  {/* Top badges */}
+                  <div className="absolute top-4 left-4 right-4 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {selected.urgent && (
+                        <div className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg">
+                          <AlertTriangle className="w-4 h-4" /> URGENT
+                        </div>
+                      )}
+                      {selected.pinned && (
+                        <div className="flex items-center gap-1.5 bg-white/90 px-4 py-2 rounded-full text-xs font-bold shadow-lg" style={{ color: "#800000" }}>
+                          <Pin className="w-4 h-4" /> Pinned
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <button
+                          onClick={() => { handleDelete(selected.id); setSelected(null); }}
+                          disabled={deletingId === selected.id}
+                          className="p-2.5 rounded-full hover:bg-red-500/20 text-red-300 hover:text-red-200 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors disabled:opacity-50 bg-black/20"
+                          title="Delete announcement"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
+                      <button onClick={() => setSelected(null)} className="p-2.5 rounded-full hover:bg-white/20 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors bg-black/20">
+                        <X className="w-5 h-5 text-white" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div>
-                    {selected.urgent && !selected.image && (
-                      <div className="flex items-center gap-1.5 text-red-600 text-xs font-bold mb-2">
-                        <AlertTriangle className="w-3.5 h-3.5" /> URGENT
+
+              {/* Content Area */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-8 sm:p-10">
+                  {/* Title Section */}
+                  <div className="mb-6">
+                    {!selected.image && (
+                      <div className="flex items-center gap-2 mb-4">
+                        {selected.urgent && (
+                          <div className="flex items-center gap-1.5 bg-red-50 text-red-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-200">
+                            <AlertTriangle className="w-3.5 h-3.5" /> URGENT
+                          </div>
+                        )}
+                        {selected.pinned && (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white border-0" style={{ backgroundColor: "#800000" }}>
+                            <Pin className="w-3.5 h-3.5" /> Pinned
+                          </div>
+                        )}
                       </div>
                     )}
-                    <h2 className="text-gray-900 font-bold" style={{ fontSize: "1.15rem" }}>{selected.title}</h2>
+                    <h1 className="text-gray-900 font-black leading-tight" style={{ fontSize: "2.2rem" }}>
+                      {selected.title}
+                    </h1>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isAdmin && (
-                      <button
-                        onClick={() => { handleDelete(selected.id); setSelected(null); }}
-                        disabled={deletingId === selected.id}
-                        className="p-2 rounded-xl hover:bg-red-50 text-red-400 hover:text-red-600 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors disabled:opacity-50"
-                        title="Delete announcement"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button onClick={() => setSelected(null)} className="p-2 rounded-xl hover:bg-gray-100 min-w-[44px] min-h-[44px] flex items-center justify-center">
-                      <X className="w-5 h-5 text-gray-400" />
-                    </button>
+
+                  {/* Meta Bar */}
+                  <div className="flex flex-wrap items-center gap-6 mb-8 pb-6 border-b-2 border-gray-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: "#f0f0f0" }}>
+                        <User className="w-5 h-5" style={{ color: "#800000" }} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Posted by</p>
+                        <p className="font-semibold text-gray-900">{selected.author}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: "#f0f0f0" }}>
+                        <Calendar className="w-5 h-5" style={{ color: "#800000" }} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Date</p>
+                        <p className="font-semibold text-gray-900">
+                          {new Date(selected.date).toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: categoryColors[selected.category]?.bg || "#f0f0f0" }}>
+                        <Tag className="w-5 h-5" style={{ color: categoryColors[selected.category]?.text?.split(" ")[1] || "#800000" }} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Category</p>
+                        <p className="font-semibold text-gray-900">{selected.category}</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 mb-4 flex-wrap">
-                  <div className="flex items-center gap-1.5 text-gray-500 text-sm">
-                    <User className="w-3.5 h-3.5" />{selected.author}
+
+                  {/* Content */}
+                  <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed">
+                    <p className="text-base sm:text-lg leading-relaxed whitespace-pre-wrap">
+                      {selected.content}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1.5 text-gray-500 text-sm">
-                    <Calendar className="w-3.5 h-3.5" />
-                    {new Date(selected.date).toLocaleDateString("en-PH", { dateStyle: "long" })}
-                  </div>
-                </div>
-                <div className="prose prose-sm max-w-none text-gray-600 leading-relaxed">
-                  {selected.content}
                 </div>
               </div>
+
+              {/* Footer Action Bar */}
+              {isAdmin && (
+                <div className="border-t border-gray-100 px-8 sm:px-10 py-4 bg-gray-50 flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="px-6 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-100 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => { handleDelete(selected.id); setSelected(null); }}
+                    disabled={deletingId === selected.id}
+                    className="px-6 py-2.5 rounded-xl bg-red-50 text-red-600 font-medium hover:bg-red-100 transition-colors border border-red-200 disabled:opacity-50"
+                  >
+                    {deletingId === selected.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              )}
             </motion.div>
           </>
         )}
@@ -294,7 +395,7 @@ export function AnnouncementsPage() {
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-40"
+              className="fixed inset-0 z-40"
               onClick={() => setShowCreate(false)}
             />
             <motion.div
@@ -369,7 +470,7 @@ export function AnnouncementsPage() {
                     <div className="relative rounded-xl overflow-hidden h-36">
                       <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                       <button
-                        onClick={() => { setImagePreview(null); if (fileRef.current) fileRef.current.value = ""; }}
+                        onClick={() => { setImagePreview(null); setImageFile(null); if (fileRef.current) fileRef.current.value = ""; }}
                         className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center"
                       >
                         <X className="w-4 h-4 text-white" />
@@ -413,16 +514,21 @@ export function AnnouncementsPage() {
               </div>
 
               <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-                <button onClick={() => setShowCreate(false)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <button onClick={() => setShowCreate(false)} disabled={creating || uploadingImage} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50">
                   Cancel
                 </button>
                 <button
                   onClick={handleCreate}
-                  disabled={!createForm.title.trim() || !createForm.content.trim() || creating}
+                  disabled={!createForm.title.trim() || !createForm.content.trim() || creating || uploadingImage}
                   className="flex-1 py-3 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
                   style={{ backgroundColor: "#800000" }}
                 >
-                  {creating ? (
+                  {uploadingImage ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Uploading image...
+                    </span>
+                  ) : creating ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       Posting...
@@ -456,46 +562,47 @@ function AnnouncementCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
       onClick={onClick}
-      className={`bg-white rounded-2xl shadow-sm border hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer overflow-hidden ${
-        a.urgent ? "border-red-200" : "border-gray-100"
-      }`}
+      className="bg-white rounded-2xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer overflow-hidden border border-gray-100 group"
     >
       {a.image && (
-        <div className="h-40 overflow-hidden relative">
-          <img src={a.image} alt={a.title} className="w-full h-full object-cover" />
+        <div className="h-48 overflow-hidden relative bg-gradient-to-b from-gray-100 to-gray-200">
+          <img src={a.image} alt={a.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
           {a.urgent && (
-            <div className="absolute top-3 left-3 flex items-center gap-1 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold">
-              <AlertTriangle className="w-3 h-3" /> URGENT
+            <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+              <AlertTriangle className="w-3.5 h-3.5" /> URGENT
             </div>
           )}
           {a.pinned && (
-            <div className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: "#800000" }}>
-              <Pin className="w-3.5 h-3.5 text-white" />
+            <div className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center bg-white shadow-lg" style={{ color: "#800000" }}>
+              <Pin className="w-4 h-4" />
             </div>
           )}
         </div>
       )}
-      <div className="p-5">
-        {!a.image && a.urgent && (
-          <div className="flex items-center gap-1.5 text-red-600 text-xs font-bold mb-2">
-            <AlertTriangle className="w-3.5 h-3.5" /> URGENT
+      <div className={`p-4 ${a.image ? "pb-5" : "pb-6"}`}>
+        {!a.image && (
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              {a.urgent && (
+                <div className="flex items-center gap-1 text-red-600 text-xs font-bold px-2 py-1 bg-red-50 rounded-lg">
+                  <AlertTriangle className="w-3 h-3" /> URGENT
+                </div>
+              )}
+              {a.pinned && <Pin className="w-4 h-4" style={{ color: "#800000" }} />}
+            </div>
           </div>
         )}
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <h3 className="font-semibold text-gray-900 leading-snug flex-1" style={{ fontSize: "0.95rem" }}>
-            {a.title}
-          </h3>
-          {!a.image && a.pinned && <Pin className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#800000" }} />}
-        </div>
-        <p className="text-gray-500 text-sm line-clamp-2 mb-3">{a.content}</p>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={`px-2 py-0.5 rounded-lg text-xs font-medium border ${cc.bg} ${cc.text} ${cc.border}`}>{a.category}</span>
-          </div>
-          <div className="flex items-center gap-3 text-gray-400 text-xs">
-            <span>{a.author}</span>
+        <h3 className="font-bold text-gray-900 leading-tight mb-2 line-clamp-2" style={{ fontSize: "1rem" }}>
+          {a.title}
+        </h3>
+        <p className="text-gray-600 text-sm line-clamp-2 mb-4 leading-relaxed">{a.content}</p>
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${cc.bg} ${cc.text} ${cc.border}`}>{a.category}</span>
+          <div className="flex items-center gap-2 text-gray-500 text-xs">
+            <span className="font-medium">{a.author}</span>
+            <span>•</span>
             <span>{new Date(a.date).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}</span>
-            <ChevronRight className="w-3.5 h-3.5" />
           </div>
         </div>
       </div>

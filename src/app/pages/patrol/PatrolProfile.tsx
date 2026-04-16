@@ -72,7 +72,7 @@ export function PatrolProfile() {
 
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-0.5">
-                <h2 className="text-white font-bold">{user.name}</h2>
+                <h2 className="text-white font-bold">{user.first_name} {user.last_name}</h2>
                 <span className="px-2 py-0.5 rounded-full text-xs text-white font-medium" style={{ backgroundColor: "#800000" }}>
                   PATROL
                 </span>

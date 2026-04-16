@@ -36,15 +36,16 @@ export function ProfilePage() {
 
   // Fetch extended profile data (bio, achievements, points, etc.)
   // Production: GET /api/profile using auth token
+  // Only fetch if user.id exists to avoid calling /profile/ without an ID
   const { data: profileData, loading: profileLoading } = useApi(
-    () => fetchUserProfile(user.id),
+    () => (user.id ? fetchUserProfile(user.id) : Promise.resolve({ data: null, error: null })),
     [user.id]
   );
 
   // Use auth user as base, override with extended profile where available
   const displayUser = {
-    name: user.name,
-    email: user.email,
+    firstName: user.first_name || "User",
+    lastName: user.last_name || "",
     avatar: user.avatar,
     barangay: user.barangay,
     role: user.role,
@@ -90,7 +91,7 @@ export function ProfilePage() {
             {/* Name + badges — always below avatar, never overlapping cover */}
             <div className="flex-1 pt-2 sm:pt-0 sm:pb-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-bold text-gray-900" style={{ fontSize: "1.2rem" }}>{displayUser.name}</h2>
+                <h2 className="font-bold text-gray-900" style={{ fontSize: "1.2rem" }}>{displayUser.firstName} {displayUser.lastName}</h2>
                 {displayUser.verified && (
                   <div className="flex items-center gap-1 bg-blue-50 rounded-full px-2 py-0.5">
                     <CheckCircle className="w-3.5 h-3.5 text-blue-500" />
@@ -199,8 +200,8 @@ export function ProfilePage() {
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 text-gray-600 text-sm">
-                    <Mail className="w-4 h-4 text-gray-400 shrink-0" />
-                    {displayUser.email}
+                    <User className="w-4 h-4 text-gray-400 shrink-0" />
+                    {displayUser.firstName} {displayUser.lastName}
                   </div>
                   <div className="flex items-center gap-3 text-gray-600 text-sm">
                     <Phone className="w-4 h-4 text-gray-400 shrink-0" />

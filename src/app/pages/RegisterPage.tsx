@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin, AlertCircle, Loader } from "lucide-react";
 import { BantayLogo } from "../components/ui/BantayLogo";
+import { VerificationNotification } from "../components/ui/VerificationNotification";
+import { registerUser, verifyOtp, generateOtp, uploadToCloudinary } from "../services/api";
 
 const steps = [
   { id: 1, label: "Personal Info", icon: User },
@@ -12,11 +14,19 @@ const steps = [
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(1);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [idUploaded, setIdUploaded] = useState(false);
+  const [idPhotoUrl, setIdPhotoUrl] = useState<string | null>(null);
+  const [idFileName, setIdFileName] = useState<string>("");
+  const [uploadingId, setUploadingId] = useState(false);
+  const [otpResent, setOtpResent] = useState(false);
+  const [showVerificationNotification, setShowVerificationNotification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -31,12 +41,183 @@ export function RegisterPage() {
     "Brgy. San Juan", "Brgy. Balaybay", "Brgy. Nagbayan", "Brgy. San Agustin",
   ];
 
-  const handleNext = () => {
-    if (step < 3) setStep(step + 1);
-    else {
+  const handleNext = async () => {
+    setError(null);
+
+    // Step 1 -> Step 2: Register with backend (generates OTP)
+    if (step === 1) {
+      // Frontend validation
+      if (!form.firstName || !form.lastName || !form.email || !form.password || !form.barangay) {
+        setError("Please fill in all required fields");
+        return;
+      }
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(form.email)) {
+        setError("Please enter a valid email address");
+        return;
+      }
+
+      if (form.password.length < 6) {
+        setError("Password must be at least 6 characters");
+        return;
+      }
+
+      // Validate phone if provided
+      if (form.phone && !/^\d{10,15}$/.test(form.phone.replace(/\D/g, ""))) {
+        setError("Please enter a valid phone number (10-15 digits)");
+        return;
+      }
+
       setLoading(true);
-      setTimeout(() => { navigate("/app/dashboard"); }, 1500);
+      const { data, error: apiError } = await registerUser({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        password: form.password,
+        phone: form.phone,
+        barangay: form.barangay,
+        role: "resident",
+      });
+
+      if (apiError) {
+        setError(apiError);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        setStep(2);
+      }
+      setLoading(false);
+      return;
     }
+
+    // Step 2 -> Step 3: Check ID uploaded and generate OTP
+    if (step === 2) {
+      if (!idUploaded || !idPhotoUrl) {
+        setError("Please upload your ID to continue");
+        return;
+      }
+      
+      // Generate OTP on Step 3 entry (creates pending registration + sends OTP)
+      setLoading(true);
+      const { data, error: otpError } = await generateOtp({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        password: form.password,
+        phone: form.phone,
+        barangay: form.barangay,
+        role: "resident",
+        idPhotoUrl: idPhotoUrl,
+      });
+      setLoading(false);
+      
+      if (otpError) {
+        setError("Failed to generate verification code: " + otpError);
+        return;
+      }
+      
+      // Clear OTP fields for fresh entry
+      setOtp(["", "", "", "", "", ""]);
+      setStep(3);
+      return;
+    }
+
+    // Step 3: Verify OTP and complete registration
+    if (step === 3) {
+      const otpCode = otp.join("");
+      if (otpCode.length !== 6) {
+        setError("Please enter the complete 6-digit OTP code");
+        return;
+      }
+
+      setLoading(true);
+      const { data, error: apiError } = await verifyOtp({
+        email: form.email,
+        otp: otpCode,
+        idPhotoUrl: idPhotoUrl || undefined,
+      });
+
+      if (apiError) {
+        setError(apiError);
+        setLoading(false);
+        return;
+      }
+
+      if (data?.success) {
+        // ✅ Registration completed, user is pending admin verification
+        // Do NOT auto-login - show pending message instead
+        setError(null);
+        
+        // Show beautiful verification notification
+        setVerificationEmail(form.email);
+        setShowVerificationNotification(true);
+      } else {
+        setError(data?.message || "OTP verification failed");
+      }
+      setLoading(false);
+    }
+  };
+
+  const handleIdUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file");
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File size must be less than 10MB");
+      return;
+    }
+
+    setUploadingId(true);
+    setError(null);
+
+    const { data, error } = await uploadToCloudinary(file);
+
+    if (error) {
+      setError("Failed to upload ID: " + error);
+      setUploadingId(false);
+      return;
+    }
+
+    if (data) {
+      setIdPhotoUrl(data.url);
+      setIdFileName(file.name);
+      setIdUploaded(true);
+    }
+
+    setUploadingId(false);
+  };
+
+  const handleResendOtp = async () => {
+    setError(null);
+    setLoading(true);
+
+    const { data, error } = await resendOtp({
+      email: form.email,
+    });
+
+    if (error) {
+      setError("Failed to resend OTP: " + error);
+      setLoading(false);
+      return;
+    }
+
+    if (data?.success) {
+      setOtpResent(true);
+      setTimeout(() => setOtpResent(false), 3000);
+    }
+
+    setLoading(false);
   };
 
   const handleOtpChange = (value: string, index: number) => {
@@ -44,8 +225,10 @@ export function RegisterPage() {
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
     if (value && index < 5) {
-      const next = document.getElementById(`otp-${index + 1}`);
-      next?.focus();
+      setTimeout(() => {
+        const next = document.getElementById(`otp-${index + 1}`);
+        next?.focus();
+      }, 0);
     }
   };
 
@@ -128,6 +311,22 @@ export function RegisterPage() {
           </div>
 
           <AnimatePresence mode="wait">
+            {/* Error Alert */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-3"
+              >
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-red-700 text-sm font-medium">Error</p>
+                  <p className="text-red-600 text-xs">{error}</p>
+                </div>
+              </motion.div>
+            )}
+
             {/* Step 1: Personal Info */}
             {step === 1 && (
               <motion.div
@@ -266,20 +465,39 @@ export function RegisterPage() {
                     </div>
                   </div>
 
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleIdUpload}
+                    className="hidden"
+                  />
+
                   <div
-                    onClick={() => setIdUploaded(true)}
+                    onClick={() => !uploadingId && fileInputRef.current?.click()}
                     className={`relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
                       idUploaded
                         ? "border-green-400 bg-green-50"
+                        : uploadingId
+                        ? "border-blue-400 bg-blue-50"
                         : "border-gray-200 hover:border-gray-400 bg-gray-50"
                     }`}
-                    style={{ borderColor: idUploaded ? "#16a34a" : undefined }}
+                    style={{ 
+                      borderColor: idUploaded ? "#16a34a" : uploadingId ? "#3b82f6" : undefined,
+                      opacity: uploadingId ? 0.7 : 1
+                    }}
                   >
-                    {idUploaded ? (
+                    {uploadingId ? (
                       <>
-                        <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                        <Loader className="w-12 h-12 text-blue-500 mx-auto mb-3 animate-spin" />
+                        <p className="text-blue-700 font-medium text-sm">Uploading your ID...</p>
+                        <p className="text-blue-600 text-xs mt-1">Please wait</p>
+                      </>
+                    ) : idUploaded ? (
+                      <>
+                        <img src={idPhotoUrl || ""} alt="Uploaded ID" className="w-32 h-32 object-cover rounded-lg mx-auto mb-3" />
                         <p className="text-green-700 font-medium text-sm">ID Uploaded Successfully</p>
-                        <p className="text-green-600 text-xs mt-1">philippine_national_id.jpg</p>
+                        <p className="text-green-600 text-xs mt-1">{idFileName}</p>
                       </>
                     ) : (
                       <>
@@ -313,7 +531,7 @@ export function RegisterPage() {
                   <h2 className="text-gray-900 mb-1" style={{ fontSize: "1.6rem", fontWeight: 700 }}>Enter OTP Code</h2>
                   <p className="text-gray-500 text-sm">
                     We sent a 6-digit code to{" "}
-                    <span className="font-medium text-gray-700">{form.phone || "09XX XXX XXXX"}</span>
+                    <span className="font-medium text-gray-700">{form.email}</span>
                   </p>
                 </div>
 
@@ -324,9 +542,37 @@ export function RegisterPage() {
                         key={i}
                         id={`otp-${i}`}
                         type="text"
+                        inputMode="numeric"
                         maxLength={1}
                         value={digit}
-                        onChange={(e) => handleOtpChange(e.target.value, i)}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, "");
+                          const newOtp = [...otp];
+                          newOtp[i] = value;
+                          setOtp(newOtp);
+                          
+                          // Move to next field if user entered a digit
+                          if (value && i < 5) {
+                            setTimeout(() => {
+                              const nextInput = document.getElementById(`otp-${i + 1}`);
+                              nextInput?.focus();
+                            }, 0);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Backspace") {
+                            if (otp[i]) {
+                              // If current field has a value, just clear it
+                              const newOtp = [...otp];
+                              newOtp[i] = "";
+                              setOtp(newOtp);
+                            } else if (i > 0) {
+                              // If current field is empty, move to previous field
+                              const prevInput = document.getElementById(`otp-${i - 1}`);
+                              prevInput?.focus();
+                            }
+                          }
+                        }}
                         className="w-12 h-14 text-center text-xl font-bold rounded-xl border-2 border-gray-200 bg-white outline-none transition-all"
                         style={{ borderColor: digit ? "#800000" : undefined }}
                         onFocus={(e) => (e.target.style.borderColor = "#800000")}
@@ -343,9 +589,24 @@ export function RegisterPage() {
                     </div>
                   </div>
 
+                  {otpResent && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 animate-pulse">
+                      <p className="text-blue-700 text-sm font-medium">OTP Resent</p>
+                      <p className="text-blue-600 text-xs">Check your email for the new code.</p>
+                    </div>
+                  )}
+
                   <p className="text-center text-sm text-gray-500">
                     Didn't receive a code?{" "}
-                    <button className="font-medium hover:underline" style={{ color: "#800000" }}>Resend OTP</button>
+                    <button 
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={loading}
+                      className="font-medium hover:underline disabled:opacity-50"
+                      style={{ color: "#800000" }}
+                    >
+                      {loading ? "Sending..." : "Resend OTP"}
+                    </button>
                   </p>
                 </div>
               </motion.div>
@@ -396,6 +657,20 @@ export function RegisterPage() {
           )}
         </div>
       </div>
+
+      {/* Verification Notification Modal */}
+      <AnimatePresence>
+        {showVerificationNotification && (
+          <VerificationNotification
+            email={verificationEmail}
+            onClose={() => setShowVerificationNotification(false)}
+            onNavigate={() => {
+              setShowVerificationNotification(false);
+              navigate("/", { replace: true });
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

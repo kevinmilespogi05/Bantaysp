@@ -35,6 +35,7 @@ import { BantayLogo } from "../components/ui/BantayLogo";
 const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
   pending:     { bg: "bg-amber-100", text: "text-amber-700",  label: "Pending" },
   in_progress: { bg: "bg-blue-100",  text: "text-blue-700",   label: "In Progress" },
+  accepted:    { bg: "bg-purple-100", text: "text-purple-700", label: "Accepted" },
   resolved:    { bg: "bg-green-100", text: "text-green-700",  label: "Resolved" },
 };
 const priorityDot: Record<string, string> = {
@@ -47,7 +48,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const firstName = user.name.split(" ")[0];
+  const firstName = user.first_name;
   const h = new Date().getHours();
   const greeting = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   const today = new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -64,12 +65,12 @@ export function DashboardPage() {
 
   const kpiCards = stats
     ? [
-        { label: "Total Reports",   value: stats.totalReports.toLocaleString(),  change: null, icon: FileText,     color: "#800000", bg: "#80000015" },
-        { label: "Pending",         value: stats.pending.toLocaleString(),        change: null, icon: Clock,        color: "#d97706", bg: "#d9770615" },
-        { label: "In Progress",     value: stats.inProgress.toLocaleString(),     change: null, icon: Zap,          color: "#2563eb", bg: "#2563eb15" },
-        { label: "Resolved",        value: stats.resolved.toLocaleString(),       change: null, icon: CheckCircle,  color: "#16a34a", bg: "#16a34a15" },
-        { label: "Active Citizens", value: stats.activeCitizens.toLocaleString(), change: null, icon: Users,        color: "#7c3aed", bg: "#7c3aed15" },
-        { label: "Response Rate",   value: `${stats.responseRate}%`,              change: null, icon: TrendingUp,   color: "#0891b2", bg: "#0891b215" },
+        { label: "Total Reports",   value: (stats.totalReports || 0).toLocaleString(),  change: null, icon: FileText,     color: "#800000", bg: "#80000015" },
+        { label: "Pending",         value: (stats.pending || 0).toLocaleString(),        change: null, icon: Clock,        color: "#d97706", bg: "#d9770615" },
+        { label: "In Progress",     value: (stats.inProgress || 0).toLocaleString(),     change: null, icon: Zap,          color: "#2563eb", bg: "#2563eb15" },
+        { label: "Resolved",        value: (stats.resolved || 0).toLocaleString(),       change: null, icon: CheckCircle,  color: "#16a34a", bg: "#16a34a15" },
+        { label: "Active Citizens", value: (stats.activeCitizens || 0).toLocaleString(), change: null, icon: Users,        color: "#7c3aed", bg: "#7c3aed15" },
+        { label: "Response Rate",   value: `${stats.responseRate || 0}%`,              change: null, icon: TrendingUp,   color: "#0891b2", bg: "#0891b215" },
       ]
     : null;
 
@@ -118,7 +119,7 @@ export function DashboardPage() {
       ) : !kpiCards ? (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div key={`kpi-skeleton-${i}`} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
               <div className="h-9 w-9 rounded-xl bg-gray-100 mb-3" />
               <div className="text-2xl font-bold text-gray-200">—</div>
               <div className="text-gray-300 text-xs mt-0.5">No data</div>
@@ -212,7 +213,7 @@ export function DashboardPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={categories} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value" paddingAngle={3}>
-                    {categories.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    {categories.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                   </Pie>
                   <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
                 </PieChart>
@@ -221,13 +222,13 @@ export function DashboardPage() {
           </div>
           {categories && categories.length > 0 && (
             <div className="space-y-2 mt-2">
-              {categories.map((c, i) => (
-                <div key={i} className="flex items-center justify-between">
+              {categories.map((c) => (
+                <div key={c.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
                     <span className="text-gray-600" style={{ fontSize: "11px" }}>{c.name}</span>
                   </div>
-                  <span className="font-medium text-gray-900" style={{ fontSize: "12px" }}>{c.value}%</span>
+                  <span className="font-medium text-gray-900" style={{ fontSize: "12px" }}>{c.value}</span>
                 </div>
               ))}
             </div>
@@ -340,7 +341,7 @@ export function DashboardPage() {
             {lbLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 animate-pulse">
+                  <div key={`skeleton-${i}`} className="flex items-center gap-3 animate-pulse">
                     <div className="w-6 h-6 rounded-full bg-gray-200 shrink-0" />
                     <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0" />
                     <div className="flex-1 space-y-1">
@@ -355,28 +356,31 @@ export function DashboardPage() {
               <EmptyState icon={Trophy} title="No leaderboard data yet" compact />
             ) : (
               <div className="space-y-3">
-                {leaderboard.slice(0, 4).map((entry) => (
-                  <div key={entry.rank} className="flex items-center gap-3">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0"
-                      style={{
-                        fontSize: "11px", fontWeight: 700,
-                        backgroundColor: entry.rank === 1 ? "#d97706" : entry.rank === 2 ? "#9ca3af" : entry.rank === 3 ? "#cd7c2f" : "#e5e7eb",
-                        color: entry.rank <= 3 ? "white" : "#6b7280",
-                      }}
-                    >
-                      {entry.rank}
+                {leaderboard.slice(0, 4).map((entry, index) => {
+                  const rank = index + 1;
+                  return (
+                    <div key={`lb-${rank}-${entry.id}-${index}`} className="flex items-center gap-3">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0"
+                        style={{
+                          fontSize: "11px", fontWeight: 700,
+                          backgroundColor: rank === 1 ? "#d97706" : rank === 2 ? "#9ca3af" : rank === 3 ? "#cd7c2f" : "#e5e7eb",
+                          color: rank <= 3 ? "white" : "#6b7280",
+                        }}
+                      >
+                        {rank}
+                      </div>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: "#800000" }}>
+                        {entry.avatar}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 text-sm truncate">{entry.first_name} {entry.last_name}</div>
+                        <div className="text-gray-400" style={{ fontSize: "11px" }}>{entry.barangay}</div>
+                      </div>
+                      <div className="text-sm font-bold" style={{ color: "#800000" }}>{entry.points?.toLocaleString() || 0}</div>
                     </div>
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: "#800000" }}>
-                      {entry.avatar}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 text-sm truncate">{entry.name}</div>
-                      <div className="text-gray-400" style={{ fontSize: "11px" }}>{entry.barangay}</div>
-                    </div>
-                    <div className="text-sm font-bold" style={{ color: "#800000" }}>{entry.points.toLocaleString()}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -1,4 +1,4 @@
-import logoImg from "figma:asset/4325118d38e0099a6f3404d453b386887c908022.png";
+import logoImg from "../../../assets/BantayLogo.png";
 
 interface BantayLogoProps {
   /** Pixel size for width & height (square). Default 36 */

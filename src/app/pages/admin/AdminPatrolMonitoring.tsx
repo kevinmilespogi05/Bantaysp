@@ -124,6 +124,23 @@ function incidentIcon(inc: IncidentLocation, selected: boolean) {
   });
 }
 
+function adminIcon() {
+  const c = "#3b82f6"; // Blue for admin
+  const sz = 40;
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:${sz}px;height:${sz}px;">
+      <div style="position:absolute;inset:0;border-radius:50%;background:${c};opacity:0.25;animation:leaflet-ping 2.5s ease-in-out infinite;"></div>
+      <div style="position:absolute;inset:4px;border-radius:50%;background:${c};border:2.5px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-size:11px;">
+        👨‍💼
+      </div>
+    </div>`,
+    iconSize: [sz, sz],
+    iconAnchor: [sz / 2, sz / 2],
+    popupAnchor: [0, -(sz / 2 + 6)],
+  });
+}
+
 // ─── Panel tabs ───────────────────────────────────────────────────────────────
 
 type PanelTab = "units" | "cases" | "messages" | "stats";
@@ -158,7 +175,32 @@ export function AdminPatrolMonitoring() {
   const [tick, setTick] = useState(0);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [lastBroadcast, setLastBroadcast] = useState<string | null>(null);
+  const [adminLocation, setAdminLocation] = useState<[number, number] | null>(null);
+  const [adminLocationLoading, setAdminLocationLoading] = useState(false);
   const msgEndRef = useRef<HTMLDivElement>(null);
+
+  // Get admin's current location on mount
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      console.warn("[Patrol Monitoring] Geolocation not supported");
+      return;
+    }
+
+    setAdminLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setAdminLocation([latitude, longitude]);
+        setAdminLocationLoading(false);
+        console.log(`[Patrol Monitoring] Admin location captured: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      },
+      (error) => {
+        console.warn("[Patrol Monitoring] Could not get admin location:", error);
+        setAdminLocationLoading(false);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+    );
+  }, []);
 
   // Simulate live patrol movement every 4 seconds
   useEffect(() => {
@@ -453,6 +495,23 @@ export function AdminPatrolMonitoring() {
                 }}
               />
             ))}
+
+          {/* Admin location marker */}
+          {adminLocation && (
+            <Marker
+              position={adminLocation}
+              icon={adminIcon()}
+              eventHandlers={{ click: () => setMapCenter(adminLocation) }}
+            >
+              <Popup closeButton={false} offset={[0, -20]}>
+                <div style={{ fontSize: "12px", color: "#333" }}>
+                  <strong>Your Location</strong>
+                  <br />
+                  Admin Center
+                </div>
+              </Popup>
+            </Marker>
+          )}
         </MapContainer>
 
         {/* ── Map overlay: top bar ── */}
@@ -487,6 +546,29 @@ export function AdminPatrolMonitoring() {
                 <span className="text-gray-500" style={{ fontSize: 10 }}>{s.label}</span>
               </div>
             ))}
+          </div>
+
+          {/* Admin location indicator */}
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg pointer-events-auto"
+            style={{ background: "rgba(15,17,23,0.92)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            {adminLocationLoading ? (
+              <>
+                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-blue-400" style={{ fontSize: 11, fontWeight: 600 }}>Getting location...</span>
+              </>
+            ) : adminLocation ? (
+              <>
+                <MapPin className="w-3 h-3 text-blue-400" />
+                <span className="text-gray-300" style={{ fontSize: 11 }}>📍 {adminLocation[0].toFixed(4)}, {adminLocation[1].toFixed(4)}</span>
+              </>
+            ) : (
+              <>
+                <MapPin className="w-3 h-3 text-gray-500" />
+                <span className="text-gray-500" style={{ fontSize: 11 }}>Location unavailable</span>
+              </>
+            )}
           </div>
 
           {/* Map layer toggle */}

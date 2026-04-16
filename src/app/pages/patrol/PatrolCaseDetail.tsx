@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft, MapPin, Clock, User, Phone, AlertTriangle,
   CheckCircle, Navigation, Camera, FileText, Zap, ChevronRight,
-  XCircle, MessageSquare, Image as ImageIcon,
+  XCircle, MessageSquare, Image as ImageIcon, Loader,
 } from "lucide-react";
-import { useApi, fetchAssignedReports } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+import { useApi, fetchAssignedReports, fetchAvailableReports, acceptPatrolCase } from "../../services/api";
 
 type CaseStatus = "pending" | "accepted" | "in_progress" | "resolving" | "resolved";
 
@@ -26,15 +27,81 @@ function timeAgo(dateStr: string) {
 export function PatrolCaseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [status, setStatus] = useState<CaseStatus>("pending");
   const [showResolution, setShowResolution] = useState(false);
   const [resNotes, setResNotes] = useState("");
   const [photoUploaded, setPhotoUploaded] = useState(false);
   const [comment, setComment] = useState("");
+  const [acceptLoading, setAcceptLoading] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
 
-  const { data: assignedReports } = useApi(fetchAssignedReports);
-  const report = (assignedReports ?? []).find((r) => r.id === id) ?? assignedReports?.[0];
+  // Fetch both assigned and available reports
+  const { data: assignedReports, loading: assignedLoading } = useApi(fetchAssignedReports);
+  const { data: availableReports, loading: availableLoading } = useApi(fetchAvailableReports);
+  
+  // Search in both lists
+  const allReports = [...(assignedReports ?? []), ...(availableReports ?? [])];
+  const report = allReports.find((r) => r.id === id);
+  const loading = assignedLoading || availableLoading;
   const pCfg = priorityConfig[report?.priority ?? "medium"] ?? priorityConfig.medium;
+
+  const handleAcceptCase = async () => {
+    if (!id) return;
+    
+    setAcceptLoading(true);
+    setAcceptError(null);
+    
+    try {
+      // Pass the user ID as the patrol ID
+      const response = await acceptPatrolCase(id, user.id);
+      
+      if (response.error) {
+        setAcceptError(response.error);
+        console.error("[PatrolCaseDetail] Accept failed:", response.error);
+        return;
+      }
+      
+      console.log("[PatrolCaseDetail] ✅ Case accepted successfully");
+      setStatus("accepted");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to accept case";
+      setAcceptError(errorMsg);
+      console.error("[PatrolCaseDetail] Accept error:", err);
+    } finally {
+      setAcceptLoading(false);
+    }
+  };
+
+  // Handle loading state
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-slate-700 border-t-green-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading case details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle case not found
+  if (!report) {
+    return (
+      <div className="p-4 md:p-6 flex flex-col items-center justify-center min-h-[60vh]">
+        <AlertTriangle className="w-12 h-12 text-amber-500 mb-4" />
+        <h2 className="text-white font-semibold text-lg mb-2">Case Not Found</h2>
+        <p className="text-slate-400 text-sm mb-6">This case is not available or has been archived.</p>
+        <button
+          onClick={() => navigate("/app/patrol/assigned")}
+          className="px-5 py-2.5 rounded-xl text-white text-sm font-medium transition-colors"
+          style={{ backgroundColor: "#800000" }}
+        >
+          Back to Assigned Reports
+        </button>
+      </div>
+    );
+  }
 
   const submitResolution = () => {
     if (!photoUploaded) return;
@@ -189,6 +256,22 @@ export function PatrolCaseDetail() {
           </div>
         </div>
 
+        {/* ── Acceptance Info ─────────────────────────── */}
+        {report.acceptedBy && (
+          <div className="rounded-2xl p-4 border border-slate-700/50" style={{ backgroundColor: "#161b22" }}>
+            <h3 className="text-slate-400 text-xs font-semibold mb-3 uppercase tracking-wide">Accepted By</h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 bg-blue-600">
+                {report.acceptedBy.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1">
+                <div className="text-white font-medium text-sm">{report.acceptedBy}</div>
+                <div className="text-slate-500 text-xs">Patrol Officer</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Map Preview ─────────────────────────────── */}
         <div
           className="rounded-2xl overflow-hidden border border-slate-700/50 relative cursor-pointer"
@@ -248,13 +331,31 @@ export function PatrolCaseDetail() {
 
         {/* ── Action Buttons ────────────────────────────── */}
         <div className="space-y-2">
+          {acceptError && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3 rounded-xl bg-red-500/15 text-red-400 text-sm border border-red-500/30"
+            >
+              {acceptError}
+            </motion.div>
+          )}
           {status === "pending" && (
             <button
-              onClick={() => setStatus("accepted")}
-              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-white font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+              onClick={handleAcceptCase}
+              disabled={acceptLoading}
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-white font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:scale-100 disabled:opacity-70"
               style={{ backgroundColor: "#16a34a" }}
             >
-              <CheckCircle className="w-5 h-5" /> Accept This Case
+              {acceptLoading ? (
+                <>
+                  <Loader className="w-5 h-5 animate-spin" /> Accepting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5" /> Accept This Case
+                </>
+              )}
             </button>
           )}
           {status === "accepted" && (

@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import {
   Users, FileText, CheckCircle, Clock, TrendingUp, AlertTriangle,
   MapPin, Shield, UserCheck, BarChart3, Settings, Eye,
-  Download, Filter, Search, Radio, ChevronDown, MoreHorizontal, type LucideIcon,
+  Download, Filter, Search, Radio, ChevronDown, MoreHorizontal, type LucideIcon, UserPlus, MessageSquare, X,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -18,8 +18,12 @@ import {
   fetchMonthlyTrends,
   fetchCategoryData,
   fetchLeaderboard,
+  fetchAllUsers,
+  fetchVerifiedUsers,
   updateReport,
   deleteReport,
+  approveUser,
+  rejectUser,
   type Report,
 } from "../services/api";
 import {
@@ -30,24 +34,30 @@ import {
   EmptyState,
   ErrorState,
 } from "../components/ui/DataStates";
+import { ImageViewerModal } from "../components/ui/ImageViewerModal";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { PromoteToPatrolModal } from "../components/ui/PromoteToPatrolModal";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { BantayLogo } from "../components/ui/BantayLogo";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
-type AdminTab = "overview" | "reports" | "users" | "verification" | "patrol";
+type AdminTab = "overview" | "reports" | "users" | "verification" | "patrol" | "chat";
 
 const adminTabs: { key: AdminTab; label: string; icon: LucideIcon }[] = [
   { key: "overview",      label: "Overview",           icon: BarChart3 },
   { key: "reports",       label: "Report Management",  icon: FileText },
   { key: "users",         label: "Users",              icon: Users },
   { key: "verification",  label: "Verification Queue", icon: UserCheck },
+  { key: "chat",          label: "User Messages",      icon: MessageSquare },
   { key: "patrol",        label: "Patrol Monitoring",  icon: Radio },
 ];
 
 const statusColors: Record<string, { bg: string; text: string; label: string }> = {
   pending:     { bg: "bg-amber-100", text: "text-amber-700", label: "Pending" },
-  in_progress: { bg: "bg-blue-100",  text: "text-blue-700",  label: "In Progress" },
+  accepted:    { bg: "bg-blue-100",  text: "text-blue-700",  label: "Accepted" },
+  in_progress: { bg: "bg-cyan-100",  text: "text-cyan-700",  label: "In Progress" },
   resolved:    { bg: "bg-green-100", text: "text-green-700", label: "Resolved" },
 };
 
@@ -56,13 +66,33 @@ const statusColors: Record<string, { bg: string; text: string; label: string }> 
 export function AdminDashboard() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
+  const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [reportSearch, setReportSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  const [reportDetailOpen, setReportDetailOpen] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+  
+  // Patrol promotion modal state
+  const [promoteModalOpen, setPromoteModalOpen] = useState(false);
+  const [selectedUserForPromotion, setSelectedUserForPromotion] = useState<any>(null);
+  
+  // Confirm dialog state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "approve" | "reject" | "delete-report";
+    userId?: string;
+    reportId?: string;
+    userName?: string;
+  } | null>(null);
 
   const activeTab = (searchParams.get("tab") ?? "overview") as AdminTab;
   const setTab = (tab: AdminTab) => {
+    if (tab === "chat") { navigate("/app/admin/chat"); return; }
     if (tab === "patrol") { navigate("/app/admin/patrol-monitoring"); return; }
     setSearchParams(tab === "overview" ? {} : { tab });
   };
@@ -73,6 +103,8 @@ export function AdminDashboard() {
   const { data: monthlyData } = useApi(fetchMonthlyTrends);
   const { data: categoryData } = useApi(fetchCategoryData);
   const { data: leaderboard, loading: lbLoading } = useApi(fetchLeaderboard);
+  const { data: verifiedUsers, loading: verifiedUsersLoading, refetch: refetchVerifiedUsers } = useApi(fetchVerifiedUsers);
+  const { data: pendingUsers, loading: pendingUsersLoading, refetch: refetchPendingUsers } = useApi(fetchAllUsers);
 
   const filteredReports = (reports ?? []).filter(
     (r) =>
@@ -83,19 +115,105 @@ export function AdminDashboard() {
   const handleStatusChange = async (reportId: string, status: Report["status"]) => {
     setUpdatingId(reportId);
     setStatusMenuId(null);
-    await updateReport(reportId, { status });
-    refetchReports();
-    retryStats();
+    try {
+      await updateReport(reportId, { status });
+      refetchReports();
+      retryStats();
+      showToast(`Report status updated to ${status}`, "success");
+    } catch (err) {
+      showToast(`Failed to update report status`, "error");
+    }
     setUpdatingId(null);
   };
 
   const handleDeleteReport = async (reportId: string) => {
-    if (!confirm("Delete this report? This cannot be undone.")) return;
-    setUpdatingId(reportId);
-    await deleteReport(reportId);
-    refetchReports();
-    retryStats();
+    setConfirmAction({ type: "delete-report", reportId });
+    setConfirmOpen(true);
+  };
+
+  const confirmDeleteReport = async () => {
+    if (!confirmAction?.reportId) return;
+    setUpdatingId(confirmAction.reportId);
+    try {
+      await deleteReport(confirmAction.reportId);
+      refetchReports();
+      retryStats();
+      showToast("Report deleted successfully", "success");
+    } catch (err) {
+      showToast("Failed to delete report", "error");
+    }
     setUpdatingId(null);
+    setConfirmOpen(false);
+    setConfirmAction(null);
+  };
+
+  const handleApproveUser = async (userId: string, userName: string) => {
+    setConfirmAction({ type: "approve", userId, userName });
+    setConfirmOpen(true);
+  };
+
+  const confirmApproveUser = async () => {
+    if (!confirmAction?.userId) return;
+    setProcessingUserId(confirmAction.userId);
+    try {
+      const result = await approveUser(confirmAction.userId);
+      if (result.data?.success) {
+        showToast(`${confirmAction.userName} approved and verified! ✨`, "success");
+        await refetchPendingUsers();
+        await refetchVerifiedUsers();
+        await retryStats();
+      } else {
+        showToast(`Failed to approve user: ${result.error}`, "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to approve user"}`, "error");
+    } finally {
+      setProcessingUserId(null);
+      setConfirmOpen(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const handleRejectUser = async (userId: string, userName: string) => {
+    setConfirmAction({ type: "reject", userId, userName });
+    setConfirmOpen(true);
+  };
+
+  const confirmRejectUser = async () => {
+    if (!confirmAction?.userId) return;
+    setProcessingUserId(confirmAction.userId);
+    try {
+      const result = await rejectUser(confirmAction.userId);
+      if (result.data?.success) {
+        showToast(`${confirmAction.userName}'s application rejected`, "warning");
+        await refetchPendingUsers();
+        await retryStats();
+      } else {
+        showToast(`Failed to reject user: ${result.error}`, "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to reject user"}`, "error");
+    } finally {
+      setProcessingUserId(null);
+      setConfirmOpen(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const openImageViewer = (imageUrl: string) => {
+    setSelectedImageUrl(imageUrl);
+    setImageViewerOpen(true);
+  };
+
+  const executeConfirm = () => {
+    if (!confirmAction) return;
+    if (confirmAction.type === "approve") {
+      confirmApproveUser();
+    } else if (confirmAction.type === "reject") {
+      confirmRejectUser();
+    } else if (confirmAction.type === "delete-report") {
+      confirmDeleteReport();
+    }
   };
 
   return (
@@ -393,7 +511,16 @@ export function AdminDashboard() {
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2">
-                            <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><Eye className="w-3.5 h-3.5 text-gray-400" /></button>
+                            <button 
+                              onClick={() => {
+                                setSelectedReport(r);
+                                setReportDetailOpen(true);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                              title="View report details"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-gray-400" />
+                            </button>
                             <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" onClick={() => handleDeleteReport(r.id)}><MoreHorizontal className="w-3.5 h-3.5 text-gray-400" /></button>
                           </div>
                         </td>
@@ -416,46 +543,66 @@ export function AdminDashboard() {
               {stats ? `${stats.totalUsers.toLocaleString()} total` : "—"}
             </span>
           </div>
-          {lbLoading ? (
+          {verifiedUsersLoading ? (
             <SkeletonList rows={6} />
-          ) : !leaderboard || leaderboard.length === 0 ? (
+          ) : !verifiedUsers || verifiedUsers.length === 0 ? (
             <EmptyState icon={Users} title="No registered users yet" description="Residents who sign up will appear here" />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    {["User", "Barangay", "Badge", "Reports", "Points", "Verified", "Actions"].map((h) => (
+                    {["User", "Barangay", "Role", "Reports", "Points", "Verified", "Actions"].map((h) => (
                       <th key={h} className="px-5 py-3 text-left text-gray-400 font-medium" style={{ fontSize: "12px" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {leaderboard.map((u, i) => (
-                    <motion.tr key={u.rank} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="hover:bg-gray-50 transition-colors">
+                  {verifiedUsers.map((u, i) => (
+                    <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>{u.avatar}</div>
-                          <span className="font-medium text-gray-900 text-sm">{u.name}</span>
+                          <span className="font-medium text-gray-900 text-sm">{u.first_name} {u.last_name}</span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-gray-500 text-sm">{u.barangay}</td>
                       <td className="px-5 py-3.5">
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full"
                           style={{
-                            backgroundColor: u.badge === "Gold" ? "#d9770615" : u.badge === "Silver" ? "#6b728015" : u.badge === "Bronze" ? "#cd7c2f15" : "#3b82f615",
-                            color: u.badge === "Gold" ? "#d97706" : u.badge === "Silver" ? "#6b7280" : u.badge === "Bronze" ? "#cd7c2f" : "#3b82f6",
-                          }}>{u.badge}</span>
+                            backgroundColor: u.role === "admin" ? "#dc262615" : u.role === "patrol" ? "#0891b215" : "#e5e7eb",
+                            color: u.role === "admin" ? "#dc2626" : u.role === "patrol" ? "#0891b2" : "#6b7280",
+                          }}>{u.role}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-gray-700 text-sm">{u.reports}</td>
-                      <td className="px-5 py-3.5 font-bold text-sm" style={{ color: "#800000" }}>{u.points.toLocaleString()}</td>
+                      <td className="px-5 py-3.5 text-gray-700 text-sm">{u.reports || 0}</td>
+                      <td className="px-5 py-3.5 font-bold text-sm" style={{ color: "#800000" }}>{(u.points || 0).toLocaleString()}</td>
                       <td className="px-5 py-3.5">
                         {u.verified
                           ? <span className="flex items-center gap-1 text-green-700 text-xs font-medium"><CheckCircle className="w-3.5 h-3.5" /> Verified</span>
                           : <span className="text-amber-600 text-xs font-medium">Pending</span>}
                       </td>
                       <td className="px-5 py-3.5">
-                        <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><MoreHorizontal className="w-3.5 h-3.5 text-gray-400" /></button>
+                        <button 
+                          onClick={() => {
+                            if (u.role === "resident") {
+                              setSelectedUserForPromotion(u);
+                              setPromoteModalOpen(true);
+                            }
+                          }}
+                          disabled={u.role !== "resident"}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            u.role === "resident"
+                              ? "hover:bg-gray-100 cursor-pointer"
+                              : "opacity-50 cursor-not-allowed"
+                          }`}
+                          title={u.role === "resident" ? "Promote to Patrol" : `Already a ${u.role}`}
+                        >
+                          {u.role === "resident" ? (
+                            <UserPlus className="w-3.5 h-3.5 text-blue-500" />
+                          ) : (
+                            <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
+                          )}
+                        </button>
                       </td>
                     </motion.tr>
                   ))}
@@ -476,6 +623,97 @@ export function AdminDashboard() {
                 <strong>{stats.pendingVerification} users</strong> are awaiting ID verification.
               </p>
             </div>
+          ) : null}
+          {pendingUsersLoading ? (
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="bg-gray-100 rounded-2xl p-5 h-96 animate-pulse" />
+              ))}
+            </div>
+          ) : pendingUsers && pendingUsers.length > 0 ? (
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {pendingUsers.map((user, i) => (
+                <motion.div
+                  key={user.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all flex flex-col"
+                >
+                  {/* User Header */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: "#800000" }}>
+                      {(user.first_name?.[0] || "A") + (user.last_name?.[0] || "B")}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 text-sm truncate">
+                        {user.first_name} {user.last_name}
+                      </div>
+                      <div className="text-gray-400 text-xs truncate">{user.barangay} · {new Date(user.joined).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}</div>
+                    </div>
+                    <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full whitespace-nowrap">Pending</span>
+                  </div>
+
+                  {/* User Info */}
+                  <div className="space-y-2 mb-4 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Email:</span>
+                      <span className="text-gray-600 truncate ml-2">{user.email}</span>
+                    </div>
+                    {user.phone && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Phone:</span>
+                        <span className="text-gray-600">{user.phone}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Role:</span>
+                      <span className="text-gray-600 capitalize">{user.role}</span>
+                    </div>
+                  </div>
+
+                  {/* ID Document Section */}
+                  <div className="bg-gray-50 rounded-xl p-3 flex items-center gap-3 mb-4 flex-1">
+                    <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center shrink-0">
+                      <Shield className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-700">ID Document</div>
+                      <div className="text-gray-400 text-xs">Submitted for verification</div>
+                    </div>
+                    {user.id_document_url ? (
+                      <button
+                        onClick={() => openImageViewer(user.id_document_url || "")}
+                        className="text-xs text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <Eye className="w-3 h-3" /> View
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-400">No image</span>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => user.id && handleApproveUser(user.id, `${user.first_name} ${user.last_name}`)}
+                      disabled={processingUserId === user.id}
+                      className="flex-1 py-2 rounded-xl text-white text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                      style={{ backgroundColor: processingUserId === user.id ? "#ccc" : "#16a34a" }}
+                    >
+                      {processingUserId === user.id ? "Processing..." : "Approve"}
+                    </button>
+                    <button
+                      onClick={() => user.id && handleRejectUser(user.id, `${user.first_name} ${user.last_name}`)}
+                      disabled={processingUserId === user.id}
+                      className="flex-1 py-2 rounded-xl text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {processingUserId === user.id ? "..." : "Reject"}
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           ) : (
             <EmptyState
               icon={UserCheck}
@@ -483,42 +721,184 @@ export function AdminDashboard() {
               description="User ID verification requests will appear here"
             />
           )}
-          {stats && stats.pendingVerification > 0 && (
-            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {Array.from({ length: Math.min(6, stats.pendingVerification) }).map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: "#800000" }}>
-                      {["AB","CD","EF","GH","IJ","KL"][i]}
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900 text-sm">Applicant {i + 1}</div>
-                      <div className="text-gray-400 text-xs">Brgy. San Pablo · 2h ago</div>
-                    </div>
-                    <span className="ml-auto bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full">Pending</span>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-3 flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
-                      <Shield className="w-5 h-5 text-gray-400" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-gray-700">PhilSys ID</div>
-                      <div className="text-gray-400 text-xs">ID image submitted</div>
-                    </div>
-                    <button className="ml-auto text-xs text-blue-600 hover:underline flex items-center gap-1">
-                      <Eye className="w-3 h-3" /> View
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="flex-1 py-2 rounded-xl text-white text-sm font-medium hover:opacity-90 transition-all" style={{ backgroundColor: "#16a34a" }}>Approve</button>
-                    <button className="flex-1 py-2 rounded-xl text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-all">Reject</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
+
+      {/* ── Image Viewer Modal ── */}
+      <ImageViewerModal
+        isOpen={imageViewerOpen}
+        imageUrl={selectedImageUrl}
+        title="Report Image"
+        onClose={() => setImageViewerOpen(false)}
+      />
+
+      {/* ── Report Detail Modal ── */}
+      {reportDetailOpen && selectedReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl"
+          >
+            {/* Header */}
+            <div className="sticky top-0 flex items-center justify-between px-8 py-6 border-b border-gray-100 bg-white">
+              <h2 className="text-xl font-bold text-gray-900">Report Details</h2>
+              <button
+                onClick={() => setReportDetailOpen(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-8 space-y-6">
+              {/* Title & Status */}
+              <div>
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <h3 className="text-2xl font-bold text-gray-900">{selectedReport.title}</h3>
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap ${statusColors[selectedReport.status]?.bg} ${statusColors[selectedReport.status]?.text}`}>
+                    {statusColors[selectedReport.status]?.label}
+                  </span>
+                </div>
+                <p className="text-gray-500 text-sm">{selectedReport.id}</p>
+              </div>
+
+              {/* meta info Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Reporter</p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
+                      {selectedReport.avatar}
+                    </div>
+                    <span className="text-sm font-medium text-gray-900">{selectedReport.reporter}</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Category</p>
+                  <span className="inline-block px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-lg">{selectedReport.category}</span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Priority</p>
+                  <span className={`inline-block px-3 py-1 text-sm rounded-lg font-medium ${selectedReport.priority === "high" ? "bg-red-100 text-red-700" : selectedReport.priority === "medium" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
+                    {selectedReport.priority.charAt(0).toUpperCase() + selectedReport.priority.slice(1)}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Date Reported</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {new Date(selectedReport.timestamp).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Location */}
+              <div>
+                <p className="text-xs text-gray-500 font-medium mb-2">Location</p>
+                <div className="flex items-center gap-2 text-gray-700">
+                  <MapPin className="w-4 h-4 flex-shrink-0" />
+                  <p className="text-sm">{selectedReport.location}</p>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <p className="text-xs text-gray-500 font-medium mb-2">Description</p>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedReport.description}</p>
+                </div>
+              </div>
+
+              {/* Image */}
+              {selectedReport.image_url && (
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-2">Report Image</p>
+                  <img
+                    src={selectedReport.image_url}
+                    alt="Report"
+                    className="w-full rounded-lg max-h-64 object-cover border border-gray-200"
+                  />
+                </div>
+              )}
+
+              {/* Engagement */}
+              <div className="flex gap-6 pt-4 border-t border-gray-100">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">Upvotes</p>
+                  <p className="text-lg font-bold text-gray-900">{selectedReport.upvotes}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">Comments</p>
+                  <p className="text-lg font-bold text-gray-900">{selectedReport.comments}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">Verified</p>
+                  <p className="text-lg font-bold text-gray-900">{selectedReport.verified ? "✓" : "—"}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-8 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 sticky bottom-0">
+              <button
+                onClick={() => setReportDetailOpen(false)}
+                className="px-6 py-2.5 rounded-lg border border-gray-200 text-gray-700 font-medium hover:bg-gray-100 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── Confirm Dialog ── */}
+      <ConfirmDialog
+        isOpen={confirmOpen}
+        title={
+          confirmAction?.type === "approve"
+            ? "Approve User"
+            : confirmAction?.type === "reject"
+              ? "Reject Application"
+              : "Delete Report"
+        }
+        message={
+          confirmAction?.type === "approve"
+            ? `Ready to approve ${confirmAction.userName}? They will be moved to verified users and can access the app.`
+            : confirmAction?.type === "reject"
+              ? `Are you sure you want to reject ${confirmAction.userName}'s application? They will be removed from the system.`
+              : "Delete this report? This action cannot be undone."
+        }
+        confirmText={
+          confirmAction?.type === "approve"
+            ? "Approve"
+            : confirmAction?.type === "reject"
+              ? "Reject"
+              : "Delete"
+        }
+        isDangerous={confirmAction?.type === "delete-report" || confirmAction?.type === "reject"}
+        onConfirm={executeConfirm}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setConfirmAction(null);
+        }}
+        isLoading={processingUserId !== null}
+      />
+
+      {/* ── Promote to Patrol Modal ── */}
+      <PromoteToPatrolModal
+        isOpen={promoteModalOpen}
+        onClose={() => {
+          setPromoteModalOpen(false);
+          setSelectedUserForPromotion(null);
+        }}
+        user={selectedUserForPromotion}
+        onSuccess={() => {
+          refetchVerifiedUsers();
+          showToast("User promoted to patrol officer!", "success");
+        }}
+      />
     </div>
   );
 }

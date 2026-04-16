@@ -61,9 +61,34 @@ export function PatrolLayout() {
   const location = useLocation();
   const [showNotifs, setShowNotifs] = useState(false);
   const [notifs, setNotifs] = useState(notifications);
+  const [patrolLocation, setPatrolLocation] = useState<[number, number] | null>(null);
+  const [patrolLocationLoading, setPatrolLocationLoading] = useState(false);
 
   const pageName = patrolPageNames[location.pathname] || "Patrol Operations";
   const unread = notifs.filter((n) => !n.read).length;
+
+  // Get patrol officer's current location on mount
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      console.warn("[Patrol Layout] Geolocation not supported");
+      return;
+    }
+
+    setPatrolLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setPatrolLocation([latitude, longitude]);
+        setPatrolLocationLoading(false);
+        console.log(`[Patrol Location] Captured: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      },
+      (error) => {
+        console.warn("[Patrol Location] Could not get location:", error);
+        setPatrolLocationLoading(false);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+    );
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#0f172a" }}>
@@ -88,7 +113,7 @@ export function PatrolLayout() {
               {user.avatar}
             </div>
             <div className="min-w-0">
-              <div className="text-white text-xs font-semibold truncate">{user.name}</div>
+              <div className="text-white text-xs font-semibold truncate">{user.first_name} {user.last_name}</div>
               <div className="text-slate-400" style={{ fontSize: "10px" }}>{user.unit}</div>
             </div>
           </div>
@@ -178,6 +203,24 @@ export function PatrolLayout() {
               <Battery className="w-3 h-3 text-amber-400" />
               <span className="text-slate-300" style={{ fontSize: "10px" }}>78%</span>
             </div>
+            
+            {/* Location Indicator */}
+            {patrolLocationLoading ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700/50" style={{ backgroundColor: "#161b22" }}>
+                <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                <span className="text-yellow-400" style={{ fontSize: "10px" }}>LOCATING...</span>
+              </div>
+            ) : patrolLocation ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700/50" style={{ backgroundColor: "#161b22" }}>
+                <div className="w-2 h-2 bg-green-400 rounded-full" />
+                <span className="text-green-400" style={{ fontSize: "10px" }}>{patrolLocation[0].toFixed(4)}, {patrolLocation[1].toFixed(4)}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700/50" style={{ backgroundColor: "#161b22" }}>
+                <div className="w-2 h-2 bg-red-400 rounded-full" />
+                <span className="text-red-400" style={{ fontSize: "10px" }}>NO LOCATION</span>
+              </div>
+            )}
           </div>
 
           {/* Notifications */}

@@ -9,21 +9,19 @@ import {
   RotateCcw, Layers, Info, CheckCircle,
 } from "lucide-react";
 import { useApi, fetchActiveCase } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
-// ─── Turn-by-turn directions ──────────────────────────────────────────────────
-const directions = [
-  { step: 1, instruction: "Head north on Purok 1 Road", distance: "80m", icon: "↑" },
-  { step: 2, instruction: "Turn right onto Barangay San Pablo Main St.", distance: "120m", icon: "→" },
-  { step: 3, instruction: "Continue straight past the church", distance: "50m", icon: "↑" },
-  { step: 4, instruction: "Destination on your left — SPES Elementary", distance: "Arrived", icon: "📍" },
-];
+// ─── Interface for Direction Steps ─────────────────────────────────────────────
+interface DirectionStep {
+  step: number;
+  instruction: string;
+  distance: string;
+  icon: string;
+}
 
-// Route waypoints (patrol position → incident) — lat/lng approx.
-const routeCoords: [number, number][] = [
-  [15.0512, 120.2018], // patrol start (south)
-  [15.0555, 120.2010],
-  [15.0580, 120.1990],
-  [15.0580, 120.1960], // incident
+// ─── Fallback directions (used while calculating real route) ─────────────────────
+const fallbackDirections: DirectionStep[] = [
+  { step: 1, instruction: "Getting route...", distance: "-", icon: "▷" },
 ];
 
 // ─── Map controller (programmatic flyTo) ─────────────────────────────────────
@@ -71,6 +69,7 @@ function incidentIcon() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function PatrolMapView() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [navStarted, setNavStarted] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showPanel, setShowPanel] = useState(true);
@@ -78,13 +77,113 @@ export function PatrolMapView() {
   const [pulse, setPulse] = useState(0);
   const [patrolPos, setPatrolPos] = useState<[number, number]>([15.0512, 120.2018]);
   const [followPatrol, setFollowPatrol] = useState(false);
+  const [directions, setDirections] = useState<DirectionStep[]>(fallbackDirections);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([[15.0512, 120.2018], [15.0580, 120.1960]]);
+  const [routeLoading, setRouteLoading] = useState(true);
+  const [locationUpdates, setLocationUpdates] = useState(0);
 
-  const { data: activeCase, loading: caseLoading } = useApi(fetchActiveCase);
+  const { data: activeCase, loading: caseLoading } = useApi(() => fetchActiveCase(user.id));
 
   // Safe fallback coordinates while data loads
   const incidentLat = activeCase?.coordinates?.lat ?? 15.0580;
   const incidentLng = activeCase?.coordinates?.lng ?? 120.1960;
   const incidentPos: [number, number] = [incidentLat, incidentLng];
+
+  // ─── Get user's current geolocation on mount ────────────────────────────────
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setPatrolPos([latitude, longitude]);
+      },
+      (error) => {
+        console.warn("Geolocation error:", error);
+        // Fallback to default if permission denied
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000,
+      }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // ─── Fetch route from OSRM when both location and incident change ───────────
+  useEffect(() => {
+    const fetchRoute = async () => {
+      if (!incidentLat || !incidentLng || !patrolPos) return;
+
+      try {
+        setRouteLoading(true);
+        // OSRM API: driving route with full geometry and turn-by-turn steps
+        const response = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${patrolPos[1]},${patrolPos[0]};${incidentLng},${incidentLat}?overview=full&geometries=geojson&steps=true&annotations=distance,duration`
+        );
+
+        if (!response.ok) throw new Error("Route calculation failed");
+        
+        const data = await response.json();
+
+        if (data.routes && data.routes.length > 0) {
+          const route = data.routes[0];
+          
+          // Extract waypoints from route geometry
+          const geometry = route.geometry as any;
+          const waypoints = geometry.coordinates.map((coord: [number, number]) => [coord[1], coord[0]] as [number, number]);
+          setRouteCoords(waypoints);
+
+          // Convert OSRM steps to user-friendly directions
+          const newDirections: DirectionStep[] = route.legs.flatMap((leg: any, legIndex: number) =>
+            leg.steps.map((step: any, stepIndex: number) => {
+              const distance = step.distance;
+              let icon = "▷";
+              
+              if (step.maneuver.type === "turn") {
+                if (step.maneuver.modifier === "left") icon = "↙";
+                else if (step.maneuver.modifier === "right") icon = "↘";
+                else icon = "↑";
+              } else if (step.maneuver.type === "continue") {
+                icon = "↑";
+              } else if (step.maneuver.type === "arrive") {
+                icon = "📍";
+              }
+
+              // Format distance (convert from meters)
+              let distStr = distance < 1000 ? `${Math.round(distance)}m` : `${(distance / 1000).toFixed(1)}km`;
+              
+              return {
+                step: legIndex * 10 + stepIndex + 1,
+                instruction: step.name ? `${step.maneuver.instruction} on ${step.name}` : step.maneuver.instruction,
+                distance: distStr,
+                icon,
+              };
+            })
+          );
+
+          // Add final destination
+          newDirections.push({
+            step: newDirections.length + 1,
+            instruction: `Destination on your left — ${activeCase?.title || "Incident"}`,
+            distance: "Arrived",
+            icon: "📍",
+          });
+
+          setDirections(newDirections);
+        }
+      } catch (error) {
+        console.error("Error fetching route:", error);
+        // Keep fallback directions
+      } finally {
+        setRouteLoading(false);
+      }
+    };
+
+    fetchRoute();
+  }, [patrolPos, incidentLat, incidentLng, activeCase?.title, locationUpdates]);
 
   // Pulse counter for live indicator
   useEffect(() => {
@@ -98,14 +197,17 @@ export function PatrolMapView() {
       const t = setInterval(() => {
         setCurrentStep((s) => {
           const next = Math.min(s + 1, directions.length - 1);
-          // Animate patrol along route
-          if (routeCoords[next]) setPatrolPos(routeCoords[next]);
+          // Animate patrol along route (using proportional index from routeCoords)
+          if (routeCoords.length > 0) {
+            const routeIndex = Math.floor((next / directions.length) * routeCoords.length);
+            setPatrolPos(routeCoords[Math.min(routeIndex, routeCoords.length - 1)]);
+          }
           return next;
         });
       }, 4000);
       return () => clearInterval(t);
     }
-  }, [navStarted, currentStep]);
+  }, [navStarted, currentStep, directions.length, routeCoords]);
 
   // Subtle patrol drift when not navigating
   useEffect(() => {
@@ -252,9 +354,27 @@ export function PatrolMapView() {
           <Crosshair className="w-4 h-4 text-white" />
         </button>
         <button
-          onClick={() => { setNavStarted(false); setCurrentStep(0); setPatrolPos(routeCoords[0]); }}
+          onClick={() => { 
+            setNavStarted(false); 
+            setCurrentStep(0);
+            
+            // Get actual current GPS location, then enable follow
+            if (navigator.geolocation) {
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  const { latitude, longitude } = position.coords;
+                  setPatrolPos([latitude, longitude]);
+                  setFollowPatrol(true); // Enable follow AFTER position is set
+                },
+                (error) => {
+                  console.warn("Could not get location:", error);
+                }
+              );
+            }
+          }}
           className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700"
           style={{ backgroundColor: "#0d1117" }}
+          title="Reset to current location"
         >
           <RotateCcw className="w-4 h-4 text-slate-300" />
         </button>
@@ -378,12 +498,17 @@ export function PatrolMapView() {
                 <div className="flex gap-3 pt-1">
                   {!navStarted ? (
                     <button
-                      onClick={() => { setNavStarted(true); setFollowPatrol(true); }}
-                      className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      onClick={() => { 
+                        setNavStarted(true); 
+                        setFollowPatrol(true); 
+                        if (routeCoords.length > 0) setPatrolPos(routeCoords[0]);
+                      }}
+                      disabled={routeLoading || directions.length <= 1}
+                      className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ backgroundColor: "#1d4ed8" }}
                     >
                       <Navigation className="w-5 h-5" />
-                      Start Navigation
+                      {routeLoading ? "Calculating Route..." : "Start Navigation"}
                     </button>
                   ) : (
                     <button

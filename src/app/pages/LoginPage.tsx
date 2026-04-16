@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router";
 import { motion } from "motion/react";
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, Chrome } from "lucide-react";
 import { useAuth, type UserRole } from "../context/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { BantayLogo } from "../components/ui/BantayLogo";
 
 export function LoginPage() {
@@ -28,22 +29,18 @@ export function LoginPage() {
       setError(err);
       return;
     }
-    navigate("/app/dashboard");
-  };
-
-  const quickLogin = async (role: UserRole) => {
-    const credMap: Record<UserRole, { email: string; password: string }> = {
-      resident: { email: "juan.delacruz@email.com", password: "resident123" },
-      admin: { email: "ebautista@castillejos.gov.ph", password: "admin123" },
-      patrol: { email: "rdelarosa@pnp.gov.ph", password: "patrol123" },
-    };
-    setLoading(true);
-    await login(credMap[role].email, credMap[role].password);
-    setLoading(false);
-    if (role === "patrol") navigate("/app/patrol/dashboard");
-    else if (role === "admin") navigate("/app/admin");
+    
+    // Get the current session to determine user role
+    const { data: { session } } = await supabase.auth.getSession();
+    const userRole = (session?.user?.user_metadata?.role as UserRole) ?? "resident";
+    
+    // Redirect based on user role
+    if (userRole === "patrol") navigate("/app/patrol/dashboard");
+    else if (userRole === "admin") navigate("/app/admin");
     else navigate("/app/dashboard");
   };
+
+
 
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: "#f7f9fb" }}>
@@ -115,37 +112,6 @@ export function LoginPage() {
           <div className="mb-8">
             <h2 className="text-gray-900 mb-1" style={{ fontSize: "1.75rem", fontWeight: 700 }}>Sign In</h2>
             <p className="text-gray-500 text-sm">Enter your credentials to access your account.</p>
-          </div>
-
-          {/* Quick Demo Logins */}
-          <div className="mb-5 p-4 rounded-2xl border border-gray-200 bg-gray-50">
-            <p className="text-xs text-gray-500 font-medium mb-3">🚀 Quick Demo Access</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => quickLogin("resident")}
-                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all text-center"
-              >
-                <span className="text-lg">👤</span>
-                <span className="text-xs font-medium text-gray-700">Resident</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLogin("admin")}
-                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-blue-200 bg-blue-50 hover:border-blue-300 hover:shadow-sm transition-all text-center"
-              >
-                <span className="text-lg">🛡️</span>
-                <span className="text-xs font-medium text-blue-700">Admin</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLogin("patrol")}
-                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-green-200 bg-green-50 hover:border-green-300 hover:shadow-sm transition-all text-center"
-              >
-                <span className="text-lg">👮</span>
-                <span className="text-xs font-medium text-green-700">Patrol</span>
-              </button>
-            </div>
           </div>
 
           {/* Google */}

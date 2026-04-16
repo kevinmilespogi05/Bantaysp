@@ -4,31 +4,36 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Plus, Filter, MapPin, Clock, MessageSquare,
   ThumbsUp, X, Image, CheckCircle, Zap, Send, FileText,
+  BadgeCheck, ChevronDown, AlertCircle,
 } from "lucide-react";
 import { useSearch } from "../context/SearchContext";
 import { useAuth } from "../context/AuthContext";
 import {
-  useApi, fetchReports, fetchComments,
-  upvoteReport, addComment,
+  useApi, fetchReports, fetchComments, fetchUserUpvotes,
+  upvoteReport, addComment, updateReportStatus,
   type Report, type Comment,
 } from "../services/api";
 import { SkeletonCard, EmptyState, ErrorState } from "../components/ui/DataStates";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-type TabKey = "all" | "pending" | "in_progress" | "resolved";
+type TabKey = "all" | "pending" | "in_progress" | "accepted" | "resolved" | "rejected";
 
 const tabs: { key: TabKey; label: string; color: string }[] = [
   { key: "all",         label: "All Reports",  color: "#800000" },
   { key: "pending",     label: "Pending",       color: "#d97706" },
   { key: "in_progress", label: "In Progress",   color: "#2563eb" },
+  { key: "accepted",    label: "Accepted",      color: "#8b5cf6" },
   { key: "resolved",    label: "Resolved",      color: "#16a34a" },
+  { key: "rejected",    label: "Rejected",      color: "#7c3aed" },
 ];
 
 const statusConfig: Record<string, { bg: string; text: string; icon: React.ElementType; label: string }> = {
   pending:     { bg: "bg-amber-100", text: "text-amber-700",  icon: Clock,        label: "Pending" },
   in_progress: { bg: "bg-blue-100",  text: "text-blue-700",   icon: Zap,          label: "In Progress" },
+  accepted:    { bg: "bg-purple-100", text: "text-purple-700", icon: BadgeCheck,   label: "Accepted" },
   resolved:    { bg: "bg-green-100", text: "text-green-700",  icon: CheckCircle,  label: "Resolved" },
+  rejected:    { bg: "bg-purple-100", text: "text-purple-700", icon: AlertCircle, label: "Rejected" },
 };
 
 const priorityConfig: Record<string, { dot: string; badge: string; label: string }> = {
@@ -58,6 +63,9 @@ export function ReportsPage() {
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   // Optimistic upvote state derived from fetched data
   const [upvoteMap, setUpvoteMap] = useState<Record<string, number>>({});
@@ -74,12 +82,22 @@ export function ReportsPage() {
     [selectedReport?.id]
   );
 
+  // Fetch current user's upvoted reports
+  const { data: userUpvotedIds } = useApi(() => fetchUserUpvotes(), []);
+
   // Seed upvoteMap when data loads
   useEffect(() => {
     if (reports) {
       setUpvoteMap(Object.fromEntries(reports.map((r) => [r.id, r.upvotes])));
     }
   }, [reports]);
+
+  // Seed upvoted set when user's upvoted reports are fetched
+  useEffect(() => {
+    if (userUpvotedIds) {
+      setUpvoted(new Set(userUpvotedIds));
+    }
+  }, [userUpvotedIds]);
 
   // Seed comment map for selected report when API returns
   useEffect(() => {
@@ -110,6 +128,7 @@ export function ReportsPage() {
     pending:     (reports ?? []).filter((r) => r.status === "pending").length,
     in_progress: (reports ?? []).filter((r) => r.status === "in_progress").length,
     resolved:    (reports ?? []).filter((r) => r.status === "resolved").length,
+    rejected:    (reports ?? []).filter((r) => r.status === "rejected").length,
   };
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -133,7 +152,7 @@ export function ReportsPage() {
     if (!newComment.trim() || !selectedReport) return;
     setCommentSubmitting(true);
     const { data, error } = await addComment(selectedReport.id, {
-      author: user.name,
+      author: `${user.first_name} ${user.last_name}`,
       avatar: user.avatar,
       text: newComment.trim(),
     });
@@ -145,6 +164,32 @@ export function ReportsPage() {
     }
     setNewComment("");
     setCommentSubmitting(false);
+  };
+
+  const handleStatusUpdate = async (newStatus: string | boolean, isVerification: boolean = false) => {
+    if (!selectedReport) return;
+    setUpdatingStatus(true);
+    setUpdateError(null);
+
+    const updateData = isVerification ? { verified: newStatus } : { status: newStatus };
+
+    const { data, error } = await updateReportStatus(selectedReport.id, updateData);
+
+    if (error) {
+      setUpdateError(error);
+      setUpdatingStatus(false);
+      return;
+    }
+
+    if (data) {
+      // Update selected report
+      setSelectedReport(data);
+      // Refresh reports list
+      refetch();
+    }
+
+    setUpdatingStatus(false);
+    setStatusDropdownOpen(false);
   };
 
   const reportComments = selectedReport ? (commentMap[selectedReport.id] ?? []) : [];
@@ -273,9 +318,9 @@ export function ReportsPage() {
                   onClick={() => { setSelectedReport(report); setShowComments(false); }}
                   className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer group overflow-hidden"
                 >
-                  {report.image ? (
+                  {report.image_url ? (
                     <div className="h-36 overflow-hidden">
-                      <img src={report.image} alt={report.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <img src={report.image_url} alt={report.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     </div>
                   ) : (
                     <div className="h-12 flex items-center justify-center" style={{ backgroundColor: "#80000008" }}>
@@ -342,7 +387,7 @@ export function ReportsPage() {
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-40"
+              className="fixed inset-0 w-screen h-screen bg-black/50 z-40"
               onClick={() => setSelectedReport(null)}
             />
             <motion.div
@@ -352,9 +397,9 @@ export function ReportsPage() {
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-white z-50 flex flex-col shadow-2xl"
             >
-              {selectedReport.image && (
+              {selectedReport.image_url && (
                 <div className="h-52 overflow-hidden relative shrink-0">
-                  <img src={selectedReport.image} alt={selectedReport.title} className="w-full h-full object-cover" />
+                  <img src={selectedReport.image_url} alt={selectedReport.title} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 </div>
               )}
@@ -377,6 +422,12 @@ export function ReportsPage() {
                       const SI = s.icon;
                       return <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${s.bg} ${s.text}`}><SI className="w-3.5 h-3.5" />{s.label}</span>;
                     })()}
+                    {selectedReport.verified && (
+                      <span className="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+                        <BadgeCheck className="w-3.5 h-3.5" />
+                        Verified
+                      </span>
+                    )}
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${priorityConfig[selectedReport.priority].badge}`}>
                       {priorityConfig[selectedReport.priority].label} Priority
                     </span>
@@ -416,6 +467,72 @@ export function ReportsPage() {
                       Comments ({reportComments.length})
                     </button>
                   </div>
+
+                  {/* Patrol/Admin Controls */}
+                  {(user.role === "patrol" || user.role === "admin") && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <h3 className="font-semibold text-amber-900 text-sm">Report Management</h3>
+                      </div>
+
+                      {/* Status Update */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                          disabled={updatingStatus}
+                          className="w-full flex items-center justify-between px-3 py-2 bg-white border border-amber-300 rounded-lg text-amber-900 text-sm hover:bg-amber-50 disabled:opacity-50 transition-colors"
+                        >
+                          <span className="font-medium">Update Status</span>
+                          <ChevronDown className={`w-4 h-4 transition-transform ${statusDropdownOpen ? "rotate-180" : ""}`} />
+                        </button>
+                        {statusDropdownOpen && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-amber-300 rounded-lg shadow-lg z-10">
+                            {["pending", "in_progress", "resolved", "rejected"].map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => handleStatusUpdate(s)}
+                                disabled={updatingStatus}
+                                className={`w-full px-3 py-2 text-left text-sm hover:bg-amber-50 disabled:opacity-50 transition-colors ${
+                                  selectedReport.status === s ? "bg-amber-100 font-medium" : ""
+                                }`}
+                              >
+                                {s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ")}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Verification Toggle */}
+                      <button
+                        onClick={() => handleStatusUpdate(!selectedReport.verified)}
+                        disabled={updatingStatus}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                          selectedReport.verified
+                            ? "bg-green-100 text-green-900 hover:bg-green-200"
+                            : "bg-white border border-amber-300 text-amber-900 hover:bg-amber-50"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <BadgeCheck className="w-4 h-4" />
+                          {selectedReport.verified ? "Verified ✓" : "Mark as Verified"}
+                        </span>
+                      </button>
+
+                      {selectedReport.verified && (
+                        <div className="text-xs text-green-700 bg-green-50 px-2 py-1.5 rounded border border-green-200">
+                          ✓ Reporter earns +50 civic points when verified
+                        </div>
+                      )}
+
+                      {updateError && (
+                        <div className="text-xs text-red-700 bg-red-50 px-2 py-1.5 rounded border border-red-200">
+                          Error: {updateError}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Comments */}
                   <AnimatePresence>

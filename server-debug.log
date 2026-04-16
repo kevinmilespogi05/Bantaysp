@@ -1,0 +1,21 @@
+[2026-04-10T05:00:57.711Z] [INFO] 
+🚀 Local registration server running at http://localhost:3000
+[2026-04-10T05:00:57.712Z] [INFO] 
+Endpoints:
+[2026-04-10T05:00:57.713Z] [INFO]   POST   http://localhost:3000/register
+[2026-04-10T05:00:57.713Z] [INFO]   POST   http://localhost:3000/verify-otp
+[2026-04-10T05:00:57.714Z] [INFO]   POST   http://localhost:3000/resend-otp
+[2026-04-10T05:00:57.716Z] [INFO]   GET    http://localhost:3000/health
+[2026-04-10T05:00:57.717Z] [INFO] 
+📝 Environment:
+[2026-04-10T05:00:57.718Z] [INFO]   SUPABASE_URL: https://cepefukwfszkgosnjmbc.supabase.co
+[2026-04-10T05:00:57.719Z] [INFO]   BREVO_API_KEY: ✅ Set
+[2026-04-10T05:00:57.721Z] [INFO] 
+💡 Tip: Update your frontend to use http://localhost:3000/register instead of the Edge Function
+
+[2026-04-10T05:00:58.025Z] [INFO] [Cleanup] Removed 0 stale pending registration(s)
+[2026-04-10T05:05:58.287Z] [INFO] [Cleanup] Removed 0 stale pending registration(s)
+[2026-04-10T05:10:58.291Z] [INFO] [Cleanup] Removed 0 stale pending registration(s)
+[2026-04-10T05:15:58.308Z] [INFO] [Cleanup] Removed 0 stale pending registration(s)
+[2026-04-10T05:20:58.270Z] [INFO] [Cleanup] Removed 0 stale pending registration(s)
+[2026-04-10T05:25:58.294Z] [INFO] [Cleanup] Removed 0 stale pending registration(s)
