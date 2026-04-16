@@ -2054,7 +2054,7 @@ app.post("/admin/reports/:id/approve", async (req, res) => {
   }
 });
 
-/** POST /admin/reports/:id/reject - Reject a pending report */
+/** POST /admin/reports/:id/reject - Reject a pending report (delete it) */
 app.post("/admin/reports/:id/reject", async (req, res) => {
   try {
     const { id } = req.params;
@@ -2068,29 +2068,33 @@ app.post("/admin/reports/:id/reject", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    console.log(`[RejectReport] Admin ${adminUser.id} rejecting report ${id}. Reason: ${reason}`);
+    console.log(`[RejectReport] Admin ${adminUser.id} rejecting (deleting) report ${id}. Reason: ${reason}`);
 
-    // Update report status to rejected
-    const now = new Date().toISOString();
-    const { data: rejectedReport, error: updateError } = await supabase
+    // First, fetch the report to confirm it exists before deleting
+    const { data: reportToDelete, error: fetchError } = await supabase
       .from("reports")
-      .update({
-        status: "rejected",
-        rejected_by: adminUser.id,
-        rejected_at: now,
-        rejection_reason: reason || "No reason provided",
-      })
+      .select("id, title, reporter")
       .eq("id", id)
-      .select()
       .single();
 
-    if (updateError || !rejectedReport) {
-      console.error("[RejectReport] Error updating report:", updateError);
+    if (fetchError || !reportToDelete) {
+      console.error("[RejectReport] Report not found:", fetchError);
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    // Delete the report
+    const { error: deleteError } = await supabase
+      .from("reports")
+      .delete()
+      .eq("id", id);
+
+    if (deleteError) {
+      console.error("[RejectReport] Error deleting report:", deleteError);
       return res.status(500).json({ error: "Failed to reject report" });
     }
 
-    console.log(`[RejectReport] ✅ Report ${id} rejected`);
-    res.json({ success: true, message: "Report rejected", report: rejectedReport });
+    console.log(`[RejectReport] ✅ Report ${id} (${reportToDelete.title}) rejected and deleted`);
+    res.json({ success: true, message: "Report rejected and deleted", reportId: id, reason });
   } catch (err) {
     console.error("[RejectReport] Error:", err);
     res.status(500).json({ error: "Failed to reject report" });
