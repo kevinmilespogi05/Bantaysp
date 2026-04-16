@@ -1505,11 +1505,12 @@ app.get("/analytics/weekly", async (req, res) => {
 
 app.get("/leaderboard", async (req, res) => {
   try {
-    console.log(`[Leaderboard] Fetching leaderboard...`);
+    console.log(`[Leaderboard] Fetching leaderboard (residents only)...`);
 
     const { data: leaderboard, error } = await supabase
       .from("user_profiles")
       .select("id, first_name, last_name, avatar, points, reports, barangay, role")
+      .eq("role", "resident")
       .order("points", { ascending: false })
       .limit(50);
 
@@ -1528,7 +1529,7 @@ app.get("/leaderboard", async (req, res) => {
         name: `${user.first_name || ""} ${user.last_name || ""}`.trim() || "Anonymous",
         points: user.points || 0,
         reports: user.reports || 0,
-        verified: user.role === "verified" || user.role === "patrol" || user.role === "admin",
+        verified: user.role === "resident",
         avatar: user.avatar || "👤",
         badge,
         barangay: user.barangay || "Unknown",
