@@ -17,11 +17,11 @@ import { SkeletonCard, EmptyState, ErrorState } from "../components/ui/DataState
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-type TabKey = "all" | "pending" | "in_progress" | "accepted" | "resolved" | "rejected";
+type TabKey = "all" | "approved" | "in_progress" | "accepted" | "resolved" | "rejected";
 
 const tabs: { key: TabKey; label: string; color: string }[] = [
   { key: "all",         label: "All Reports",  color: "#800000" },
-  { key: "pending",     label: "Pending",       color: "#d97706" },
+  { key: "approved",    label: "Approved",      color: "#d97706" },
   { key: "in_progress", label: "In Progress",   color: "#2563eb" },
   { key: "accepted",    label: "Accepted",      color: "#8b5cf6" },
   { key: "resolved",    label: "Resolved",      color: "#16a34a" },
@@ -29,7 +29,7 @@ const tabs: { key: TabKey; label: string; color: string }[] = [
 ];
 
 const statusConfig: Record<string, { bg: string; text: string; icon: React.ElementType; label: string }> = {
-  pending:     { bg: "bg-amber-100", text: "text-amber-700",  icon: Clock,        label: "Pending" },
+  approved:    { bg: "bg-amber-100", text: "text-amber-700",  icon: Clock,        label: "Approved" },
   in_progress: { bg: "bg-blue-100",  text: "text-blue-700",   icon: Zap,          label: "In Progress" },
   accepted:    { bg: "bg-purple-100", text: "text-purple-700", icon: BadgeCheck,   label: "Accepted" },
   resolved:    { bg: "bg-green-100", text: "text-green-700",  icon: CheckCircle,  label: "Resolved" },
@@ -125,7 +125,7 @@ export function ReportsPage() {
 
   const counts: Record<TabKey, number> = {
     all:         (reports ?? []).length,
-    pending:     (reports ?? []).filter((r) => r.status === "pending").length,
+    approved:    (reports ?? []).filter((r) => r.status === "approved").length,
     in_progress: (reports ?? []).filter((r) => r.status === "in_progress").length,
     accepted:    (reports ?? []).filter((r) => r.status === "accepted").length,
     resolved:    (reports ?? []).filter((r) => r.status === "resolved").length,

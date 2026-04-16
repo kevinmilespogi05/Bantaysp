@@ -14,6 +14,7 @@ import {
   useApi,
   fetchAdminStats,
   fetchReports,
+  fetchPendingReports,
   fetchBarangayData,
   fetchMonthlyTrends,
   fetchCategoryData,
@@ -24,6 +25,8 @@ import {
   deleteReport,
   approveUser,
   rejectUser,
+  approveReport,
+  rejectReport,
   type Report,
 } from "../services/api";
 import {
@@ -76,6 +79,11 @@ export function AdminDashboard() {
   const [reportDetailOpen, setReportDetailOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+  const [reportsSubTab, setReportsSubTab] = useState<"all" | "pending-verification">("all");
+  const [processingReportId, setProcessingReportId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [pendingRejectReportId, setPendingRejectReportId] = useState<string | null>(null);
   
   // Patrol promotion modal state
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
@@ -99,6 +107,7 @@ export function AdminDashboard() {
 
   const { data: stats, loading: statsLoading, error: statsError, refetch: retryStats } = useApi(fetchAdminStats);
   const { data: reports, loading: reportsLoading, error: reportsError, refetch: refetchReports } = useApi(fetchReports);
+  const { data: pendingReports, loading: pendingReportsLoading, error: pendingReportsError, refetch: refetchPendingReports } = useApi(fetchPendingReports);
   const { data: barangayData, loading: chartsLoading } = useApi(fetchBarangayData);
   const { data: monthlyData } = useApi(fetchMonthlyTrends);
   const { data: categoryData } = useApi(fetchCategoryData);
@@ -197,6 +206,52 @@ export function AdminDashboard() {
       setProcessingUserId(null);
       setConfirmOpen(false);
       setConfirmAction(null);
+    }
+  };
+
+  const handleApprovePendingReport = async (reportId: string) => {
+    setProcessingReportId(reportId);
+    try {
+      const result = await approveReport(reportId);
+      if (result.data?.success) {
+        showToast(`Report approved! Resident earned 50 points ✨`, "success");
+        await refetchPendingReports();
+        await refetchReports();
+        await retryStats();
+      } else {
+        showToast(`Failed to approve report: ${result.error}`, "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to approve report"}`, "error");
+    } finally {
+      setProcessingReportId(null);
+    }
+  };
+
+  const handleRejectPendingReport = async (reportId: string) => {
+    setPendingRejectReportId(reportId);
+    setShowRejectModal(true);
+  };
+
+  const confirmRejectPendingReport = async () => {
+    if (!pendingRejectReportId) return;
+    setProcessingReportId(pendingRejectReportId);
+    try {
+      const result = await rejectReport(pendingRejectReportId, rejectionReason);
+      if (result.data?.success) {
+        showToast(`Report rejected with reason: "${rejectionReason}"`, "warning");
+        await refetchPendingReports();
+        await retryStats();
+      } else {
+        showToast(`Failed to reject report: ${result.error}`, "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to reject report"}`, "error");
+    } finally {
+      setProcessingReportId(null);
+      setShowRejectModal(false);
+      setRejectionReason("");
+      setPendingRejectReportId(null);
     }
   };
 
@@ -407,6 +462,38 @@ export function AdminDashboard() {
 
       {/* ── Reports Tab ── */}
       {activeTab === "reports" && (
+        <div className="space-y-4">
+          {/* Reports Sub-tabs */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setReportsSubTab("all")}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                reportsSubTab === "all"
+                  ? "bg-[#800000] text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              All Reports {reports?.length ? `(${reports.length})` : ""}
+            </button>
+            <button
+              onClick={() => setReportsSubTab("pending-verification")}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                reportsSubTab === "pending-verification"
+                  ? "bg-[#800000] text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Pending Verification
+              {pendingReports?.length ? (
+                <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                  {pendingReports.length}
+                </span>
+              ) : null}
+            </button>
+          </div>
+
+          {/* All Reports View */}
+          {reportsSubTab === "all" && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex flex-col sm:flex-row gap-3 px-5 py-4 border-b border-gray-100">
             <div className="relative flex-1">
@@ -610,6 +697,142 @@ export function AdminDashboard() {
               </table>
             </div>
           )}
+        </div>
+          )}
+
+          {/* Pending Verification View */}
+          {reportsSubTab === "pending-verification" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          {!pendingReportsLoading && pendingReports && pendingReports.length > 0 && (
+            <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-amber-700 text-sm">
+                <strong>{pendingReports.length} reports</strong> awaiting verification. Approved reports will be visible to the community and patrol can accept them.
+              </p>
+            </div>
+          )}
+          {pendingReportsLoading ? (
+            <SkeletonList rows={4} />
+          ) : pendingReportsError ? (
+            <ErrorState message={pendingReportsError} compact />
+          ) : !pendingReports || pendingReports.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle}
+              title="All caught up!"
+              description="No pending reports. All reports have been verified or are being handled."
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {["Report ID", "Title", "Category", "Reporter", "Location", "Date", "Actions"].map((h) => (
+                      <th key={h} className="px-5 py-3 text-left text-gray-400 font-medium" style={{ fontSize: "12px" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {pendingReports.map((r, i) => (
+                    <motion.tr
+                      key={r.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: i * 0.03 }}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-5 py-3.5 text-gray-500 text-sm font-mono">{r.id}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="font-medium text-gray-900 text-sm max-w-xs truncate">{r.title}</div>
+                        <div className="text-gray-400 text-xs mt-0.5 max-w-xs truncate">{r.description}</div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-lg">{r.category}</span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
+                            {r.avatar}
+                          </div>
+                          <span className="text-gray-700 text-sm">{r.reporter}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-gray-700 text-sm max-w-xs truncate">{r.location}</td>
+                      <td className="px-5 py-3.5 text-gray-500 text-sm">
+                        {new Date(r.created_at || r.timestamp).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
+                      </td>
+                      <td className="px-5 py-3.5 flex gap-2">
+                        <button
+                          onClick={() => handleApprovePendingReport(r.id)}
+                          disabled={processingReportId === r.id}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            processingReportId === r.id
+                              ? "opacity-50 cursor-not-allowed"
+                              : "bg-green-100 text-green-700 hover:bg-green-200"
+                          }`}
+                          title="Approve and make visible to community"
+                        >
+                          ✓ Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectPendingReport(r.id)}
+                          disabled={processingReportId === r.id}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            processingReportId === r.id
+                              ? "opacity-50 cursor-not-allowed"
+                              : "bg-red-100 text-red-700 hover:bg-red-200"
+                          }`}
+                          title="Reject this report"
+                        >
+                          ✗ Reject
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+          )}
+        </div>
+      )}
+
+      {/* Reject Report Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 max-w-md w-full space-y-4"
+          >
+            <h3 className="font-semibold text-gray-900 text-lg">Reject Report</h3>
+            <p className="text-gray-600 text-sm">Provide a reason for rejecting this report so the reporter can improve.</p>
+            <textarea
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Reason for rejection (e.g., duplicate report, insufficient details, fake report)..."
+              className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#800000] resize-none h-24"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setRejectionReason("");
+                  setPendingRejectReportId(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRejectPendingReport}
+                disabled={!rejectionReason.trim() || processingReportId === pendingRejectReportId}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Reject Report
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
 
