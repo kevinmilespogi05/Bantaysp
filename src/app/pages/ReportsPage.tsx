@@ -127,6 +127,7 @@ export function ReportsPage() {
     all:         (reports ?? []).length,
     pending:     (reports ?? []).filter((r) => r.status === "pending").length,
     in_progress: (reports ?? []).filter((r) => r.status === "in_progress").length,
+    accepted:    (reports ?? []).filter((r) => r.status === "accepted").length,
     resolved:    (reports ?? []).filter((r) => r.status === "resolved").length,
     rejected:    (reports ?? []).filter((r) => r.status === "rejected").length,
   };
