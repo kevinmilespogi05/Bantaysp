@@ -7,15 +7,13 @@
  */
 
 import { useState, useEffect } from "react";
-import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase } from "@/lib/supabase";
 
 // ─── Base HTTP config ─────────────────────────────────────────────────────────
 
-// Use local server for development, cloud function for production
-const BASE_URL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:3000'
-  : `https://${projectId}.supabase.co/functions/v1/make-server-5f514c57`;
+// Use Render backend if available, otherwise fall back to local dev server
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = BACKEND_URL;
 
 const HEADERS = {
   "Content-Type": "application/json",
@@ -68,26 +66,29 @@ async function apiFetch<T>(
   useSessionToken: boolean = true
 ): Promise<ApiResponse<T>> {
   try {
-    let authHeader = `Bearer ${publicAnonKey}`;
-    let tokenSource = "public-key";
+    // Always get the session token for the Render backend
+    let authHeader = "";
     
     if (useSessionToken) {
       const accessToken = await getAccessToken();
       if (accessToken) {
         authHeader = `Bearer ${accessToken}`;
-        tokenSource = "session-token";
       } else {
-        console.warn("[API] Could not retrieve access token, using public key fallback");
+        console.warn("[API] No access token available - request may fail");
       }
     }
     
-    const headers = {
+    const headers: Record<string, string> = {
       ...HEADERS,
-      Authorization: authHeader,
     };
+
+    // Only add Authorization header if we have a token
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
     
     const url = `${BASE_URL}${path}`;
-    console.log(`[API] ${options.method || "GET"} ${path} (auth: ${tokenSource})`);
+    console.log(`[API] ${options.method || "GET"} ${path}`);
 
     const res = await fetch(url, { ...options, headers });
     
@@ -98,7 +99,6 @@ async function apiFetch<T>(
         path,
         status: res.status,
         statusText: res.statusText,
-        tokenSource,
       });
     }
     
