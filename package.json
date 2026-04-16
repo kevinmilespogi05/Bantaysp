@@ -8,8 +8,7 @@
     "build:frontend": "vite build",
     "dev": "vite",
     "dev:server": "ts-node local-server.ts",
-    "build:server": "tsc local-server.ts --outDir dist --module esnext --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --allowSyntheticDefaultImports",
-    "start:server": "node dist/local-server.js",
+    "start:server": "ts-node local-server.ts",
     "preview": "vite preview"
   },
   "dependencies": {
