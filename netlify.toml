@@ -1,7 +1,7 @@
 # Netlify Configuration for Bantaysp Frontend
 
 [build]
-  command = "npm run build:frontend"
+  command = "npm install && npm run build:frontend"
   publish = "dist"
 
 [build.environment]
