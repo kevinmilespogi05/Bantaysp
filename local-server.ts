@@ -2014,36 +2014,43 @@ app.post("/admin/reports/:id/approve", async (req, res) => {
       return res.status(500).json({ error: "Failed to approve report" });
     }
 
-    // Award points to reporter via leaderboard
-    if (approvedReport.user_id) {
-      // Fetch current leaderboard entry
-      const { data: leaderboardEntry, error: fetchError } = await supabase
-        .from("leaderboard")
-        .select("points")
-        .eq("user_id", approvedReport.user_id)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.warn("[ApproveReport] Warning: Could not fetch leaderboard entry:", fetchError);
-      } else if (leaderboardEntry) {
-        // Update with incremented points
-        const { error: updateError } = await supabase
+    // Award points to reporter via leaderboard (wrapped in try-catch to not break the flow)
+    let pointsAwarded = false;
+    try {
+      if (approvedReport.user_id) {
+        // Fetch current leaderboard entry
+        const { data: leaderboardEntry, error: fetchError } = await supabase
           .from("leaderboard")
-          .update({
-            points: leaderboardEntry.points + 50,
-            updated_at: now,
-          })
-          .eq("user_id", approvedReport.user_id);
+          .select("points")
+          .eq("user_id", approvedReport.user_id)
+          .maybeSingle();
 
-        if (updateError) {
-          console.warn("[ApproveReport] Warning: Could not update leaderboard points:", updateError);
+        if (fetchError) {
+          console.warn("[ApproveReport] Warning: Could not fetch leaderboard entry:", fetchError);
+        } else if (leaderboardEntry) {
+          // Update with incremented points
+          const { error: pointsUpdateError } = await supabase
+            .from("leaderboard")
+            .update({
+              points: leaderboardEntry.points + 50,
+              updated_at: now,
+            })
+            .eq("user_id", approvedReport.user_id);
+
+          if (pointsUpdateError) {
+            console.warn("[ApproveReport] Warning: Could not update leaderboard points:", pointsUpdateError);
+          } else {
+            console.log(`[ApproveReport] ✅ Awarded 50 points to reporter ${approvedReport.user_id}`);
+            pointsAwarded = true;
+          }
         } else {
-          console.log(`[ApproveReport] ✅ Awarded 50 points to reporter ${approvedReport.user_id}`);
+          // No leaderboard entry - skip points (user will be created when they first appear on leaderboard)
+          console.log(`[ApproveReport] Note: No leaderboard entry for user ${approvedReport.user_id} yet`);
         }
-      } else {
-        // No leaderboard entry - skip points (user will be created when they first appear on leaderboard)
-        console.log(`[ApproveReport] Note: No leaderboard entry for user ${approvedReport.user_id} yet`);
       }
+    } catch (pointsErr) {
+      console.error("[ApproveReport] Error in points award logic:", pointsErr);
+      // Continue - report is already approved, points not critical
     }
 
     console.log(`[ApproveReport] ✅ Report ${id} approved`);
@@ -2585,36 +2592,41 @@ app.post("/patrol/history", async (req, res) => {
 
     console.log(`[PatrolHistoryPost] ✅ Case ${caseId} resolved by patrol ${patrolUser.id}`);
 
-    // Award additional points to reporter when resolved
-    if (report.user_id) {
-      // Fetch current leaderboard entry
-      const { data: leaderboardEntry, error: fetchError } = await supabase
-        .from("leaderboard")
-        .select("points")
-        .eq("user_id", report.user_id)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.warn("[PatrolHistoryPost] Warning: Could not fetch leaderboard entry:", fetchError);
-      } else if (leaderboardEntry) {
-        // Update with incremented points
-        const { error: updateError } = await supabase
+    // Award additional points to reporter when resolved (wrapped in try-catch)
+    try {
+      if (report.user_id) {
+        // Fetch current leaderboard entry
+        const { data: leaderboardEntry, error: fetchError } = await supabase
           .from("leaderboard")
-          .update({
-            points: leaderboardEntry.points + 25,
-            updated_at: now,
-          })
-          .eq("user_id", report.user_id);
+          .select("points")
+          .eq("user_id", report.user_id)
+          .maybeSingle();
 
-        if (updateError) {
-          console.warn("[PatrolHistoryPost] Warning: Could not update leaderboard points:", updateError);
+        if (fetchError) {
+          console.warn("[PatrolHistoryPost] Warning: Could not fetch leaderboard entry:", fetchError);
+        } else if (leaderboardEntry) {
+          // Update with incremented points
+          const { error: pointsUpdateError } = await supabase
+            .from("leaderboard")
+            .update({
+              points: leaderboardEntry.points + 25,
+              updated_at: now,
+            })
+            .eq("user_id", report.user_id);
+
+          if (pointsUpdateError) {
+            console.warn("[PatrolHistoryPost] Warning: Could not update leaderboard points:", pointsUpdateError);
+          } else {
+            console.log(`[PatrolHistoryPost] ✅ Awarded 25 resolution points to reporter ${report.user_id}`);
+          }
         } else {
-          console.log(`[PatrolHistoryPost] ✅ Awarded 25 resolution points to reporter ${report.user_id}`);
+          // No leaderboard entry - skip points
+          console.log(`[PatrolHistoryPost] Note: No leaderboard entry for user ${report.user_id} yet`);
         }
-      } else {
-        // No leaderboard entry - skip points
-        console.log(`[PatrolHistoryPost] Note: No leaderboard entry for user ${report.user_id} yet`);
       }
+    } catch (pointsErr) {
+      console.error("[PatrolHistoryPost] Error in points award logic:", pointsErr);
+      // Continue - case is already resolved, points not critical
     }
 
     res.json({
