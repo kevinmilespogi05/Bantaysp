@@ -332,7 +332,7 @@ export function CreateReportPage() {
         </div>
         <h2 className="text-gray-900 mb-2 font-semibold" style={{ fontSize: "1.4rem" }}>Report Submitted!</h2>
         <p className="text-gray-500 mb-2">Your report has been received and will be reviewed shortly.</p>
-        <p className="text-gray-400 text-sm">+50 civic points earned · Redirecting...</p>
+        <p className="text-gray-400 text-sm">Earn 50 points when verified by admin · Redirecting...</p>
         <div className="mt-4 flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2">
           <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
           <span className="text-green-600 text-sm">Redirecting to Reports...</span>
@@ -625,7 +625,7 @@ export function CreateReportPage() {
                 <span className="font-medium text-sm">Civic Points</span>
               </div>
               <div className="text-white/80 text-xs leading-relaxed">
-                Earn <strong className="text-white">+50 points</strong> for each verified report. Resolve an issue and earn bonus points!
+                <strong className="text-white">+50 points</strong> when admin verifies your report. <strong className="text-white">+25 bonus</strong> if resolved!
               </div>
             </div>
 
