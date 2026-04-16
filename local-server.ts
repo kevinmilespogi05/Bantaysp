@@ -809,11 +809,12 @@ app.get("/dashboard/stats", async (req, res) => {
 
 app.get("/reports", async (req, res) => {
   try {
-    console.log(`[Reports] Fetching reports...`);
+    console.log(`[Reports] Fetching approved reports...`);
 
     const { data: reports, error } = await supabase
       .from("reports")
       .select("*")
+      .in("status", ["approved", "in_progress", "resolved"])
       .order("created_at", { ascending: false })
       .limit(100);
 
@@ -906,12 +907,13 @@ app.post("/reports", async (req, res) => {
           location,
           location_lat: finalLat,
           location_lng: finalLng,
-          status: "pending",
+          status: "pending_verification",
           reporter: reporterName,
           avatar: reporterAvatar,
           image_url: image_url || null,
           timestamp: now,
           created_at: now,
+          user_id: token ? (await supabase.auth.getUser(token)).data?.user?.id : null,
           comments: 0,
           upvotes: 0,
         },
@@ -1903,6 +1905,134 @@ app.post("/admin/reject-user/:userId", async (req, res) => {
   } catch (err) {
     console.error(`[RejectUser] Error:`, err);
     res.status(500).json({ error: "Failed to reject user" });
+  }
+});
+
+// ─── Admin Report Verification ───────────────────────────────────────────────
+
+/** GET /admin/reports/pending - Get pending verification reports */
+app.get("/admin/reports/pending", async (req, res) => {
+  try {
+    console.log("[AdminPendingReports] Fetching pending verification reports...");
+
+    const { data: pendingReports, error } = await supabase
+      .from("reports")
+      .select("id, title, description, category, priority, location, status, reporter, avatar, image_url, created_at, comments, upvotes, user_id, admin_notes")
+      .eq("status", "pending_verification")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("[AdminPendingReports] Error:", error);
+      return res.status(500).json({ error: "Failed to fetch pending reports" });
+    }
+
+    console.log(`[AdminPendingReports] Found ${pendingReports?.length || 0} pending reports`);
+    res.json(pendingReports || []);
+  } catch (err) {
+    console.error("[AdminPendingReports] Error:", err);
+    res.status(500).json({ error: "Failed to fetch pending reports" });
+  }
+});
+
+/** POST /admin/reports/:id/approve - Approve a pending report */
+app.post("/admin/reports/:id/approve", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    // Get admin user ID from token
+    const { data: { user: adminUser }, error: userError } = await supabase.auth.getUser(token);
+    if (!adminUser || userError) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log(`[ApproveReport] Admin ${adminUser.id} approving report ${id}`);
+
+    // Update report status to approved
+    const now = new Date().toISOString();
+    const { data: approvedReport, error: updateError } = await supabase
+      .from("reports")
+      .update({
+        status: "approved",
+        approved_by: adminUser.id,
+        approved_at: now,
+        verified: true,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError || !approvedReport) {
+      console.error("[ApproveReport] Error updating report:", updateError);
+      return res.status(500).json({ error: "Failed to approve report" });
+    }
+
+    // Award points to reporter via leaderboard
+    if (approvedReport.user_id) {
+      const { error: pointsError } = await supabase
+        .from("leaderboard")
+        .update({
+          points: supabase.raw("points + 50"),
+          updated_at: now,
+        })
+        .eq("user_id", approvedReport.user_id);
+
+      if (pointsError) {
+        console.warn("[ApproveReport] Warning: Could not update leaderboard points:", pointsError);
+      } else {
+        console.log(`[ApproveReport] ✅ Awarded 50 points to reporter ${approvedReport.user_id}`);
+      }
+    }
+
+    console.log(`[ApproveReport] ✅ Report ${id} approved`);
+    res.json({ success: true, message: "Report approved and points awarded", report: approvedReport });
+  } catch (err) {
+    console.error("[ApproveReport] Error:", err);
+    res.status(500).json({ error: "Failed to approve report" });
+  }
+});
+
+/** POST /admin/reports/:id/reject - Reject a pending report */
+app.post("/admin/reports/:id/reject", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    // Get admin user ID from token
+    const { data: { user: adminUser }, error: userError } = await supabase.auth.getUser(token);
+    if (!adminUser || userError) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log(`[RejectReport] Admin ${adminUser.id} rejecting report ${id}. Reason: ${reason}`);
+
+    // Update report status to rejected
+    const now = new Date().toISOString();
+    const { data: rejectedReport, error: updateError } = await supabase
+      .from("reports")
+      .update({
+        status: "rejected",
+        rejected_by: adminUser.id,
+        rejected_at: now,
+        rejection_reason: reason || "No reason provided",
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError || !rejectedReport) {
+      console.error("[RejectReport] Error updating report:", updateError);
+      return res.status(500).json({ error: "Failed to reject report" });
+    }
+
+    console.log(`[RejectReport] ✅ Report ${id} rejected`);
+    res.json({ success: true, message: "Report rejected", report: rejectedReport });
+  } catch (err) {
+    console.error("[RejectReport] Error:", err);
+    res.status(500).json({ error: "Failed to reject report" });
   }
 });
 

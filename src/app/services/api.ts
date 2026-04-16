@@ -130,7 +130,7 @@ export interface Report {
   user_id: string;
   title: string;
   category: string;
-  status: "pending" | "accepted" | "in_progress" | "resolved" | "rejected";
+  status: "pending_verification" | "approved" | "rejected" | "in_progress" | "resolved" | "accepted";
   priority: "high" | "medium" | "low";
   location: string;
   timestamp: string;
@@ -141,6 +141,14 @@ export interface Report {
   verified: boolean;
   comments: number;
   upvotes: number;
+  approved_by?: string;
+  approved_at?: string;
+  rejected_by?: string;
+  rejected_at?: string;
+  rejection_reason?: string;
+  resolved_by?: string;
+  resolved_at?: string;
+  admin_notes?: string;
 }
 
 export interface Announcement {
@@ -529,6 +537,32 @@ export async function updateReport(
 /** Delete a report */
 export async function deleteReport(id: string): Promise<ApiResponse<{ success: boolean }>> {
   return apiFetch<{ success: boolean }>(`/reports/${id}`, { method: "DELETE" });
+}
+
+/** Admin: Get pending verification reports */
+export async function fetchPendingReports(): Promise<ApiResponse<Report[]>> {
+  return apiFetch<Report[]>(`/admin/reports/pending`);
+}
+
+/** Admin: Approve a pending report */
+export async function approveReport(
+  id: string
+): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
+  return apiFetch<{ success: boolean; message: string; report: Report }>(
+    `/admin/reports/${id}/approve`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
+/** Admin: Reject a pending report */
+export async function rejectReport(
+  id: string,
+  reason: string
+): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
+  return apiFetch<{ success: boolean; message: string; report: Report }>(
+    `/admin/reports/${id}/reject`,
+    { method: "POST", body: JSON.stringify({ reason }) }
+  );
 }
 
 /** Post a comment on a report */
