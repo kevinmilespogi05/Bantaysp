@@ -3,7 +3,7 @@ services:
     name: bantaysp-backend
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install --include=dev
     startCommand: npm run start:server
     envVars:
       - key: NODE_ENV
