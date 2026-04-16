@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "build:frontend": "vite build",
+    "dev": "vite",
+    "dev:server": "ts-node local-server.ts",
+    "start:server": "node --loader ts-node/esm local-server.ts",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

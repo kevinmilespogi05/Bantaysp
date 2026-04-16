@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: bantaysp-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start:server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Add these via Render dashboard:
+      # - SUPABASE_URL
+      # - SUPABASE_SERVICE_ROLE_KEY
+      # - SENDGRID_API_KEY
+      # - CLOUDINARY_CLOUD_NAME
+      # - CLOUDINARY_API_KEY
+      # - CLOUDINARY_API_SECRET

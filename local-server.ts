@@ -18,9 +18,27 @@ import * as crypto from "crypto";
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const ENV = process.env.NODE_ENV || 'development';
 
-app.use(cors());
+app.use(cors({
+  origin: function(origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean);
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else if (ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json());
 
 // Get from .env or environment
