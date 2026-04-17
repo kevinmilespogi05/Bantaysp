@@ -229,7 +229,7 @@ export function PatrolMapView() {
   const tileAttrib = '&copy; <a href="https://carto.com">CARTO</a>';
 
   return (
-    <div className="relative w-full overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
+    <div className="relative w-full overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
       {/* ── LEAFLET MAP ─────────────────────────────────────── */}
       <MapContainer
         center={[15.055, 120.199]}
@@ -315,28 +315,28 @@ export function PatrolMapView() {
       {/* ── OVERLAY CONTROLS ─────────────────────────────────── */}
 
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 p-3 flex items-center gap-2 z-[450]">
+      <div className="absolute top-0 left-0 right-0 p-2 sm:p-3 flex items-center gap-1.5 sm:gap-2 z-[450]">
         <button
           onClick={() => navigate(-1)}
-          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700"
+          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700 shrink-0"
           style={{ backgroundColor: "#0d1117" }}
         >
           <ArrowLeft className="w-4 h-4 text-white" />
         </button>
         <div
-          className="flex-1 rounded-xl px-4 py-2.5 shadow-lg flex items-center gap-2 border border-slate-700"
+          className="flex-1 rounded-xl px-2.5 sm:px-4 py-2 sm:py-2.5 shadow-lg flex items-center gap-2 border border-slate-700 min-w-0"
           style={{ backgroundColor: "#0d1117" }}
         >
           <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-white text-xs font-semibold truncate">{activeCase?.title ?? "Loading..."}</div>
-            <div className="text-slate-400 text-xs">{activeCase?.location ?? ""}</div>
+            <div className="text-slate-400 text-xs truncate hidden xs:block">{activeCase?.location ?? ""}</div>
           </div>
-          <div className="text-blue-400 text-xs font-bold shrink-0">{activeCase?.distance ?? "Loading..."}</div>
+          <div className="text-blue-400 text-xs font-bold shrink-0">{activeCase?.distance ?? "—"}</div>
         </div>
         <button
           onClick={() => setTileStyle(tileStyle === "dark" ? "satellite" : "dark")}
-          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700"
+          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700 shrink-0"
           style={{ backgroundColor: "#0d1117" }}
         >
           <Layers className="w-4 h-4 text-slate-300" />
@@ -344,10 +344,10 @@ export function PatrolMapView() {
       </div>
 
       {/* Right Controls */}
-      <div className="absolute right-3 top-20 flex flex-col gap-2 z-[450]">
+      <div className="absolute right-2 sm:right-3 top-14 sm:top-20 flex flex-col gap-2 z-[450]">
         <button
           onClick={() => setFollowPatrol((f) => !f)}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700 transition-all`}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700 transition-all shrink-0`}
           style={{ backgroundColor: followPatrol ? "#1d4ed8" : "#0d1117" }}
           title="Follow patrol"
         >
@@ -372,7 +372,7 @@ export function PatrolMapView() {
               );
             }
           }}
-          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700"
+          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-slate-700 shrink-0"
           style={{ backgroundColor: "#0d1117" }}
           title="Reset to current location"
         >
@@ -384,17 +384,17 @@ export function PatrolMapView() {
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="absolute top-20 left-3 rounded-xl shadow-lg border border-slate-700 p-3 z-[450]"
+        className="absolute top-14 sm:top-20 left-2 sm:left-3 rounded-xl shadow-lg border border-slate-700 p-2 sm:p-3 z-[450]"
         style={{ backgroundColor: "#0d1117" }}
       >
         <div className="flex items-center gap-1.5 mb-1">
           <Navigation className="w-3.5 h-3.5 text-blue-400" />
-          <span className="text-blue-400 text-xs font-bold">En Route</span>
+          <span className="text-blue-400 text-xs font-bold">Route</span>
         </div>
-        <div className="text-white text-lg font-bold">{activeCase?.distance ?? "Loading..."}</div>
+        <div className="text-white text-base sm:text-lg font-bold">{activeCase?.distance ?? "—"}</div>
         <div className="flex items-center gap-1 mt-0.5">
           <Clock className="w-3 h-3 text-slate-400" />
-          <span className="text-slate-400 text-xs">ETA: ~{activeCase?.eta ?? "Loading..."}</span>
+          <span className="text-slate-400 text-xs">ETA: ~{activeCase?.eta ?? "—"}</span>
         </div>
       </motion.div>
 
@@ -407,16 +407,16 @@ export function PatrolMapView() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="rounded-t-3xl border-t border-slate-700 shadow-2xl"
+              className="rounded-t-3xl border-t border-slate-700 shadow-2xl max-h-[60vh] overflow-y-auto"
               style={{ backgroundColor: "#0d1117" }}
             >
               {/* Panel Handle */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
+              <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-700/50 sticky top-0" style={{ backgroundColor: "#0d1117" }}>
                 <div className="flex items-center gap-2">
                   {navStarted ? (
                     <>
                       <Zap className="w-4 h-4 text-amber-400 animate-pulse" />
-                      <span className="text-amber-400 text-sm font-bold">Navigation Active</span>
+                      <span className="text-amber-400 text-xs sm:text-sm font-bold">Navigating</span>
                       {currentStep === directions.length - 1 && (
                         <CheckCircle className="w-4 h-4 text-green-400 ml-1" />
                       )}
@@ -424,38 +424,36 @@ export function PatrolMapView() {
                   ) : (
                     <>
                       <Info className="w-4 h-4 text-slate-400" />
-                      <span className="text-slate-300 text-sm font-medium">Route to Incident</span>
+                      <span className="text-slate-300 text-xs sm:text-sm font-medium">Route to Incident</span>
                     </>
                   )}
                 </div>
                 <button onClick={() => setShowPanel(false)} className="text-slate-500 hover:text-slate-300">
-                  <ChevronDown className="w-4 h-4" />
+                  <ChevronUp className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="p-4 space-y-3">
+              <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
                 {/* Active Step */}
                 {navStarted && (
                   <motion.div
                     key={currentStep}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="rounded-2xl p-4 border border-blue-500/30"
+                    className="rounded-2xl p-3 sm:p-4 border border-blue-500/30"
                     style={{ backgroundColor: "#1e3a5f" }}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <div
                         className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xl"
                         style={{ backgroundColor: "#1d4ed8" }}
                       >
                         {directions[currentStep].icon}
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="text-white font-semibold text-sm">{directions[currentStep].instruction}</div>
-                        <div className="text-blue-300 text-xs mt-0.5">
+                        <div className="text-blue-300 text-xs mt-0.5 truncate">
                           {directions[currentStep].distance}
-                          {currentStep < directions.length - 1 &&
-                            ` · Next: ${directions[currentStep + 1].instruction.slice(0, 30)}...`}
                         </div>
                       </div>
                     </div>
@@ -463,11 +461,11 @@ export function PatrolMapView() {
                 )}
 
                 {/* Steps Preview */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {directions.map((d, i) => (
                     <div
                       key={d.step}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${
+                      className={`flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 rounded-xl transition-all ${
                         navStarted && i === currentStep
                           ? "bg-blue-500/15 border border-blue-500/30"
                           : navStarted && i < currentStep
@@ -487,7 +485,7 @@ export function PatrolMapView() {
                         {navStarted && i < currentStep ? "✓" : d.step}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-slate-300 text-xs">{d.instruction}</div>
+                        <div className="text-slate-300 text-xs truncate">{d.instruction}</div>
                       </div>
                       <div className="text-slate-500 text-xs shrink-0">{d.distance}</div>
                     </div>
@@ -495,7 +493,7 @@ export function PatrolMapView() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-3 pt-1">
+                <div className="flex gap-2 pt-1">
                   {!navStarted ? (
                     <button
                       onClick={() => { 

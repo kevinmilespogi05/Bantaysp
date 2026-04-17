@@ -277,34 +277,34 @@ export function PatrolDashboard() {
   ] : [];
 
   return (
-    <div className="p-4 md:p-5 space-y-4 pb-24 md:pb-6">
+    <div className="p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4 pb-24 lg:pb-6">
       {/* ── Shift Status Banner ─────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between rounded-2xl px-4 py-3 border border-slate-700/50"
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 border border-slate-700/50 gap-2"
         style={{ backgroundColor: "#161b22" }}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse shrink-0" />
           <span className="text-green-400 text-xs font-semibold">ON DUTY</span>
-          <span className="text-slate-600 text-xs">·</span>
+          <span className="text-slate-600 text-xs hidden xs:block">·</span>
           <span className="text-slate-300 text-xs">{user.unit}</span>
-          <span className="text-slate-600 text-xs">·</span>
-          <span className="text-slate-400 text-xs">{user.badgeNumber}</span>
+          <span className="text-slate-600 text-xs hidden sm:block">·</span>
+          <span className="text-slate-400 text-xs hidden sm:block">{user.badgeNumber}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Radio className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-slate-400 text-xs">Shift: {user.shiftStart}–{user.shiftEnd}</span>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-700/30 text-slate-300 text-xs flex-1 sm:flex-none">
+            <Radio className="w-3 h-3 text-blue-400 shrink-0" />
+            <span className="truncate">Shift: {user.shiftStart}–{user.shiftEnd}</span>
           </div>
           <button
             onClick={() => navigate("/app/dashboard")}
-            className="flex items-center gap-2 ml-2 px-3 py-1.5 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 hover:text-slate-100 text-xs font-medium transition-all border border-slate-600 hover:border-slate-500"
+            className="flex items-center justify-center gap-1 ml-auto px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 hover:text-slate-100 text-xs font-medium transition-all border border-slate-600 hover:border-slate-500 shrink-0"
             title="End shift and return home"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">End Shift</span>
+            <span className="hidden xs:inline">End</span>
           </button>
         </div>
       </motion.div>
@@ -379,33 +379,33 @@ export function PatrolDashboard() {
                     {activeCase?.title}
                   </h2>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-red-300 shrink-0" />
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-white/50 text-xs">Location</div>
-                        <div className="text-white text-xs font-medium leading-tight">{activeCase?.location}</div>
+                        <div className="text-white text-xs font-medium leading-tight truncate">{activeCase?.location}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Navigation className="w-4 h-4 text-blue-300 shrink-0" />
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-white/50 text-xs">Distance</div>
                         <div className="text-white text-xs font-medium">{activeCase?.distance} · ~{activeCase?.eta}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-amber-300 shrink-0" />
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-white/50 text-xs">Reported</div>
                         <div className="text-white text-xs font-medium">{timeAgo(activeCase?.timeReported)}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-green-300 shrink-0" />
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-white/50 text-xs">Reporter</div>
-                        <div className="text-white text-xs font-medium">{activeCase?.reporter}</div>
+                        <div className="text-white text-xs font-medium truncate">{activeCase?.reporter}</div>
                       </div>
                     </div>
                   </div>
@@ -447,21 +447,21 @@ export function PatrolDashboard() {
                       <>
                         <button
                           onClick={handleAccept}
-                          className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-3 rounded-xl bg-green-500 hover:bg-green-400 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                          className="flex-1 min-w-[110px] flex items-center justify-center gap-2 py-2.5 sm:py-3 rounded-xl bg-green-500 hover:bg-green-400 text-white font-semibold text-xs sm:text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
-                          <CheckCircle className="w-4 h-4" /> Accept Case
+                          <CheckCircle className="w-4 h-4" /> <span>Accept</span>
                         </button>
                         <button
                           onClick={handleDecline}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/20 text-white/60 hover:text-white hover:border-white/40 text-sm transition-all"
+                          className="flex items-center justify-center gap-1 px-3 py-2.5 sm:py-3 rounded-xl border border-white/20 text-white/60 hover:text-white hover:border-white/40 text-xs sm:text-sm transition-all"
                         >
-                          <XCircle className="w-4 h-4" /> Decline
+                          <XCircle className="w-4 h-4" /> <span className="hidden xs:inline">Decline</span>
                         </button>
                         <button
                           onClick={() => navigate("/app/patrol/map")}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-all"
+                          className="flex items-center justify-center gap-1 px-3 py-2.5 sm:py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-medium transition-all"
                         >
-                          <Navigation className="w-4 h-4" /> View Map
+                          <Navigation className="w-4 h-4" /> <span className="hidden xs:inline">Map</span>
                         </button>
                       </>
                     )}
@@ -469,22 +469,22 @@ export function PatrolDashboard() {
                       <>
                         <button
                           onClick={() => navigate("/app/patrol/map")}
-                          className="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-all hover:scale-[1.02]"
+                          className="flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 sm:py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm transition-all hover:scale-[1.02]"
                         >
-                          <Navigation className="w-4 h-4" /> Navigate to Scene
+                          <Navigation className="w-4 h-4" /> <span>Navigate</span>
                         </button>
                         <button
                           onClick={handleInProgress}
                           disabled={inProgressLoading}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium transition-all disabled:opacity-70"
+                          className="flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 sm:py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs sm:text-sm font-semibold transition-all disabled:opacity-70"
                         >
                           {inProgressLoading ? (
                             <>
-                              <Loader className="w-4 h-4 animate-spin" /> Starting...
+                              <Loader className="w-4 h-4 animate-spin" /> In Progress
                             </>
                           ) : (
                             <>
-                              <Zap className="w-4 h-4" /> Mark In Progress
+                              <Zap className="w-4 h-4" /> In Progress
                             </>
                           )}
                         </button>
@@ -508,16 +508,15 @@ export function PatrolDashboard() {
                             }
                           }}
                           disabled={cancelLoading}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-red-500/50 text-red-400 hover:text-red-300 hover:border-red-400 text-sm transition-all disabled:opacity-50"
+                          className="flex items-center justify-center gap-1 px-3 py-2.5 sm:py-3 rounded-xl border border-red-500/50 text-red-400 hover:text-red-300 hover:border-red-400 text-xs sm:text-sm transition-all disabled:opacity-50"
                         >
                           {cancelLoading ? (
                             <>
                               <div className="w-3.5 h-3.5 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />
-                              Canceling...
                             </>
                           ) : (
                             <>
-                              <XCircle className="w-4 h-4" /> Cancel
+                              <XCircle className="w-4 h-4" />
                             </>
                           )}
                         </button>
@@ -527,22 +526,22 @@ export function PatrolDashboard() {
                       <>
                         <button
                           onClick={handleResolve}
-                          className="flex-1 min-w-[150px] flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                          className="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 sm:py-3 rounded-xl text-white font-bold text-xs sm:text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
                           style={{ backgroundColor: "#16a34a" }}
                         >
-                          <CheckCircle className="w-5 h-5" /> Mark as Resolved
+                          <CheckCircle className="w-4 h-4" /> <span>Resolved</span>
                         </button>
                         <button
                           onClick={() => navigate("/app/patrol/map")}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600/80 hover:bg-blue-500 text-white text-sm transition-all"
+                          className="flex items-center justify-center gap-1 px-3 py-2.5 sm:py-3 rounded-xl bg-blue-600/80 hover:bg-blue-500 text-white text-xs sm:text-sm transition-all"
                         >
-                          <Navigation className="w-4 h-4" /> Map
+                          <Navigation className="w-4 h-4" /> <span className="hidden xs:inline">Map</span>
                         </button>
                         <button
                           onClick={() => {}}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/20 text-white/60 hover:text-white text-sm transition-all"
+                          className="flex items-center justify-center gap-1 px-3 py-2.5 sm:py-3 rounded-xl border border-white/20 text-white/60 hover:text-white text-xs sm:text-sm transition-all"
                         >
-                          <Camera className="w-4 h-4" /> Upload Photo
+                          <Camera className="w-4 h-4" /> <span className="hidden xs:inline">Photo</span>
                         </button>
                       </>
                     )}
@@ -642,32 +641,32 @@ export function PatrolDashboard() {
       )}
 
       {/* ── Stats Row ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {stats.map((s, i) => (
           <motion.div
             key={i}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + i * 0.05 }}
-            className="rounded-2xl p-4 border border-slate-700/50"
+            className="rounded-2xl p-3 sm:p-4 border border-slate-700/50"
             style={{ backgroundColor: "#161b22" }}
           >
             <div className="flex items-center gap-2 mb-2">
-              <s.icon className="w-4 h-4" style={{ color: s.color }} />
-              <span className="text-slate-400 text-xs">{s.label}</span>
+              <s.icon className="w-4 h-4 shrink-0" style={{ color: s.color }} />
+              <span className="text-slate-400 text-xs truncate">{s.label}</span>
             </div>
-            <div className="text-white font-bold" style={{ fontSize: "1.4rem" }}>{s.value}</div>
+            <div className="text-white font-bold text-lg sm:text-xl">{s.value}</div>
           </motion.div>
         ))}
       </div>
 
       {/* ── Bottom Grid ──────────────────────────────────── */}
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
         {/* Assigned Queue */}
         <div className="rounded-2xl border border-slate-700/50 overflow-hidden" style={{ backgroundColor: "#161b22" }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-700/50">
             <div className="flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" style={{ color: "#800000" }} />
+              <ClipboardList className="w-4 h-4 shrink-0" style={{ color: "#800000" }} />
               <span className="text-white text-sm font-semibold">Case Queue</span>
               <span className="px-1.5 py-0.5 rounded-full text-xs text-white font-bold" style={{ backgroundColor: "#800000" }}>
                 {assignedReports?.length}
@@ -677,7 +676,7 @@ export function PatrolDashboard() {
               onClick={() => navigate("/app/patrol/assigned")}
               className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
             >
-              View all <ArrowRight className="w-3 h-3" />
+              <span className="hidden xs:inline">View all</span> <ArrowRight className="w-3 h-3" />
             </button>
           </div>
           <div className="divide-y divide-slate-700/30">
@@ -687,7 +686,7 @@ export function PatrolDashboard() {
                 <div
                   key={r.id}
                   onClick={() => navigate(`/app/patrol/case/${r.id}`)}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-700/20 cursor-pointer transition-colors group"
+                  className="flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-slate-700/20 cursor-pointer transition-colors group"
                 >
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pColor }} />
                   <div className="flex-1 min-w-0">
@@ -706,21 +705,22 @@ export function PatrolDashboard() {
 
         {/* Recent Resolved */}
         <div className="rounded-2xl border border-slate-700/50 overflow-hidden" style={{ backgroundColor: "#161b22" }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-700/50">
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-green-400" />
-              <span className="text-white text-sm font-semibold">Recent Resolved</span>
+              <Activity className="w-4 h-4 text-green-400 shrink-0" />
+              <span className="text-white text-sm font-semibold hidden xs:block">Recent Resolved</span>
+              <span className="text-white text-sm font-semibold xs:hidden">Resolved</span>
             </div>
             <button
               onClick={() => navigate("/app/patrol/history")}
               className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
             >
-              All history <ArrowRight className="w-3 h-3" />
+              <span className="hidden xs:inline">All history</span> <ArrowRight className="w-3 h-3" />
             </button>
           </div>
           <div className="divide-y divide-slate-700/30">
             {(patrolHistory ?? []).slice(0, 3).map((r) => (
-              <div key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-700/20 transition-colors">
+              <div key={r.id} className="flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-slate-700/20 transition-colors">
                 <div className="w-7 h-7 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
                   <CheckCircle className="w-3.5 h-3.5 text-green-400" />
                 </div>
@@ -738,31 +738,31 @@ export function PatrolDashboard() {
       </div>
 
       {/* ── Performance Summary ───────────────────────────── */}
-      <div className="rounded-2xl border border-slate-700/50 p-4" style={{ backgroundColor: "#161b22" }}>
+      <div className="rounded-2xl border border-slate-700/50 p-3 sm:p-4" style={{ backgroundColor: "#161b22" }}>
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-4 h-4" style={{ color: "#800000" }} />
-          <span className="text-white text-sm font-semibold">Performance Overview</span>
-          <span className="ml-auto text-slate-500 text-xs">April 2026</span>
+          <TrendingUp className="w-4 h-4 shrink-0" style={{ color: "#800000" }} />
+          <span className="text-white text-sm font-semibold">Performance</span>
+          <span className="ml-auto text-slate-500 text-xs hidden xs:block">April 2026</span>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           <div className="text-center">
-            <div className="text-2xl font-bold text-white mb-1">{patrolStats?.month.completed ?? "—"}</div>
-            <div className="text-slate-400 text-xs">Cases This Month</div>
-            <div className="mt-2 h-1.5 rounded-full bg-slate-700">
+            <div className="text-xl sm:text-2xl font-bold text-white mb-1">{patrolStats?.month.completed ?? "—"}</div>
+            <div className="text-slate-400 text-xs mb-2">Cases</div>
+            <div className="h-1.5 rounded-full bg-slate-700">
               <div className="h-full rounded-full" style={{ width: "76%", backgroundColor: "#800000" }} />
             </div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-white mb-1">{patrolStats?.week.clearanceRate ?? "—"}%</div>
-            <div className="text-slate-400 text-xs">Clearance Rate</div>
-            <div className="mt-2 h-1.5 rounded-full bg-slate-700">
+            <div className="text-xl sm:text-2xl font-bold text-white mb-1">{patrolStats?.week.clearanceRate ?? "—"}%</div>
+            <div className="text-slate-400 text-xs mb-2">Clearance</div>
+            <div className="h-1.5 rounded-full bg-slate-700">
               <div className="h-full rounded-full bg-green-500" style={{ width: `${patrolStats?.week.clearanceRate ?? 0}%` }} />
             </div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-white mb-1">{patrolStats?.month.commendations ?? "—"}</div>
-            <div className="text-slate-400 text-xs">Commendations</div>
-            <div className="mt-2 flex justify-center gap-1">
+            <div className="text-xl sm:text-2xl font-bold text-white mb-1">{patrolStats?.month.commendations ?? "—"}</div>
+            <div className="text-slate-400 text-xs mb-2">Rewards</div>
+            <div className="flex justify-center gap-1">
               {[1, 2].map((i) => <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />)}
             </div>
           </div>

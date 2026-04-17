@@ -113,10 +113,10 @@ export function PatrolAssignedReports() {
         className="rounded-2xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] overflow-hidden border-slate-700/50 hover:border-slate-600"
         style={{ backgroundColor: "#161b22" }}
       >
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${pCfg.bg}`}>
                   {pCfg.label}
                 </span>
@@ -130,7 +130,7 @@ export function PatrolAssignedReports() {
           {/* Category + Location */}
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
-            <span className="text-slate-400 text-xs">{r.category}</span>
+            <span className="text-slate-400 text-xs truncate">{r.category}</span>
           </div>
           <div className="flex items-center gap-1.5 mb-3">
             <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
@@ -140,44 +140,44 @@ export function PatrolAssignedReports() {
           {/* Status Badge */}
           {r.acceptedBy && (
             <div className="mb-2 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-500/20 border border-blue-500/40 w-fit">
-              <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-bold bg-blue-600">
-                {r.acceptedBy.substring(0, 2).toUpperCase()}
+              <div className="w-3 h-3 rounded-full flex items-center justify-center text-white text-xs font-bold bg-blue-600">
+                {r.acceptedBy.substring(0, 1)}
               </div>
-              <span className="text-blue-300 text-xs font-medium">Accepted by {r.acceptedBy}</span>
+              <span className="text-blue-300 text-xs font-medium">Accepted</span>
             </div>
           )}
 
           {/* Bottom Row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <Navigation className="w-3.5 h-3.5 text-blue-400" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-1">
+                <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                 <span className="text-blue-400 text-xs font-medium">{r.distance}</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <div className="flex items-center gap-1 hidden xs:flex">
+                <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 <span className="text-slate-500 text-xs">{timeAgo(r.timeReported)}</span>
               </div>
             </div>
             {actionType === "admin" ? (
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(`/app/patrol/case/${r.id}?action=accept`); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+                className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shrink-0"
                 title="Accept admin assignment"
               >
-                <Check className="w-3 h-3" /> Accept
+                <Check className="w-3 h-3" /> <span className="hidden xs:inline">Accept</span>
               </button>
             ) : actionType === "available" ? (
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(`/app/patrol/case/${r.id}?action=self-assign`); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors"
+                className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors shrink-0"
                 title="Self-assign this report"
               >
-                <Zap className="w-3 h-3" /> Self-Assign
+                <Zap className="w-3 h-3" /> <span className="hidden xs:inline">Assign</span>
               </button>
             ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-medium">
-                <Clock className="w-3 h-3" /> Awaiting Review
+              <div className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-medium shrink-0">
+                <Clock className="w-3 h-3" /> <span className="hidden xs:inline">Awaiting</span>
               </div>
             )}
           </div>
@@ -189,22 +189,22 @@ export function PatrolAssignedReports() {
 
 
   return (
-    <div className="p-4 md:p-5 space-y-4 pb-24 md:pb-6">
+    <div className="p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4 pb-24 lg:pb-6">
       {/* Header Banner */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl p-4 border border-slate-700/50"
+        className="rounded-2xl p-3 sm:p-4 border border-slate-700/50"
         style={{ backgroundColor: "#161b22" }}
       >
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-white font-bold text-base">Report Queues</h2>
             <p className="text-slate-400 text-xs mt-0.5">
-              {adminAssigned?.length ?? 0} admin-assigned · {availableReports?.length ?? 0} available · {submittedReports?.length ?? 0} submitted
+              {adminAssigned?.length ?? 0} admin · {availableReports?.length ?? 0} available · {submittedReports?.length ?? 0} submitted
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <div className="px-2.5 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: "#800000" }}>
               {(adminAssigned?.length ?? 0) + (availableReports?.length ?? 0) + (submittedReports?.length ?? 0)} Total
             </div>
@@ -212,58 +212,61 @@ export function PatrolAssignedReports() {
         </div>
       </motion.div>
 
-      {/* Queue Tabs */}
-      <div className="flex gap-2 border-b border-slate-700">
+      {/* Queue Tabs - Mobile scrollable, desktop normal */}
+      <div className="flex gap-1 sm:gap-2 border-b border-slate-700 overflow-x-auto pb-2">
         <button
           onClick={() => { setActiveTab("assigned"); setSearch(""); }}
-          className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
+          className={`px-2.5 sm:px-4 py-2 whitespace-nowrap font-medium text-xs sm:text-sm transition-all border-b-2 ${
             activeTab === "assigned"
               ? "border-blue-500 text-blue-400"
               : "border-transparent text-slate-500 hover:text-slate-400"
           }`}
         >
-          Admin-Assigned ({adminAssigned?.length ?? 0})
+          <span className="hidden xs:inline">Admin-Assigned</span>
+          <span className="xs:hidden">Admin</span> ({adminAssigned?.length ?? 0})
         </button>
         <button
           onClick={() => { setActiveTab("available"); setSearch(""); }}
-          className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
+          className={`px-2.5 sm:px-4 py-2 whitespace-nowrap font-medium text-xs sm:text-sm transition-all border-b-2 ${
             activeTab === "available"
               ? "border-green-500 text-green-400"
               : "border-transparent text-slate-500 hover:text-slate-400"
           }`}
         >
-          Available to Self-Assign ({availableReports?.length ?? 0})
+          <span className="hidden xs:inline">Available</span>
+          <span className="xs:hidden">Self-Assign</span> ({availableReports?.length ?? 0})
         </button>
         <button
           onClick={() => { setActiveTab("submitted"); setSearch(""); }}
-          className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
+          className={`px-2.5 sm:px-4 py-2 whitespace-nowrap font-medium text-xs sm:text-sm transition-all border-b-2 ${
             activeTab === "submitted"
               ? "border-blue-500 text-blue-400"
               : "border-transparent text-slate-500 hover:text-slate-400"
           }`}
         >
-          Awaiting Admin Review ({submittedReports?.length ?? 0})
+          <span className="hidden xs:inline">Awaiting</span>
+          <span className="xs:hidden">Review</span> ({submittedReports?.length ?? 0})
         </button>
       </div>
 
       {/* Search + Sort */}
       <div className="flex gap-2">
-        <div className="flex-1 flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2.5" style={{ backgroundColor: "#161b22" }}>
+        <div className="flex-1 flex items-center gap-2 rounded-xl border border-slate-700 px-2.5 sm:px-3 py-2 sm:py-2.5" style={{ backgroundColor: "#161b22" }}>
           <Search className="w-4 h-4 text-slate-500 shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search reports..."
-            className="bg-transparent text-sm text-slate-300 placeholder-slate-600 outline-none w-full"
+            placeholder="Search..."
+            className="bg-transparent text-xs sm:text-sm text-slate-300 placeholder-slate-600 outline-none w-full"
           />
         </div>
         <button
           onClick={() => setSortBy(sortBy === "priority" ? "distance" : sortBy === "distance" ? "time" : "priority")}
-          className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-white transition-colors text-xs"
+          className="flex items-center justify-center gap-1 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-white transition-colors text-xs"
           style={{ backgroundColor: "#161b22" }}
         >
           <ArrowUpDown className="w-3.5 h-3.5" />
-          <span className="hidden sm:block capitalize">{sortBy}</span>
+          <span className="hidden sm:inline capitalize">{sortBy}</span>
         </button>
       </div>
 

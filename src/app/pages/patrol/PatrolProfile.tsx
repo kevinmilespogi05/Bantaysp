@@ -43,7 +43,7 @@ export function PatrolProfile() {
   const shiftProgress = 58; // % of shift completed — production: compute from shiftStart/shiftEnd
 
   return (
-    <div className="p-4 md:p-5 space-y-4 pb-24 md:pb-6">
+    <div className="p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4 pb-24 lg:pb-6">
 
       {/* ── Officer Card ── */}
       <motion.div
@@ -52,15 +52,15 @@ export function PatrolProfile() {
         className="rounded-2xl border-2 overflow-hidden"
         style={{ borderColor: "#800000", backgroundColor: "#161b22" }}
       >
-        <div className="p-5 relative overflow-hidden">
+        <div className="p-3 sm:p-5 relative overflow-hidden">
           <div className="absolute right-0 top-0 bottom-0 flex items-center justify-end opacity-5 pr-4">
-            <Shield className="w-32 h-32" style={{ color: "#800000" }} />
+            <Shield className="w-24 sm:w-32 h-24 sm:h-32" style={{ color: "#800000" }} />
           </div>
 
-          <div className="flex items-start gap-4 relative">
+          <div className="flex items-start gap-3 sm:gap-4 relative">
             <div className="relative shrink-0">
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl"
+                className="w-14 sm:w-16 h-14 sm:h-16 rounded-2xl flex items-center justify-center text-white font-bold text-lg sm:text-xl"
                 style={{ backgroundColor: "#800000" }}
               >
                 {user.avatar}
@@ -70,35 +70,35 @@ export function PatrolProfile() {
               </div>
             </div>
 
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
-                <h2 className="text-white font-bold">{user.first_name} {user.last_name}</h2>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <h2 className="text-white font-bold text-sm sm:text-base">{user.first_name} {user.last_name}</h2>
                 <span className="px-2 py-0.5 rounded-full text-xs text-white font-medium" style={{ backgroundColor: "#800000" }}>
                   PATROL
                 </span>
               </div>
-              <div className="text-slate-400 text-sm mb-2">{(user as any).rank ?? "Patrol Officer"}</div>
-              <div className="flex flex-wrap gap-2">
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700" style={{ backgroundColor: "#0d1117" }}>
-                  <Radio className="w-3 h-3 text-green-400" />
-                  <span className="text-green-400 text-xs">{(user as any).unit ?? "Unit —"}</span>
+              <div className="text-slate-400 text-xs sm:text-sm mb-2">{(user as any).rank ?? "Patrol Officer"}</div>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                <div className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg border border-slate-700 text-xs" style={{ backgroundColor: "#0d1117" }}>
+                  <Radio className="w-3 h-3 text-green-400 shrink-0" />
+                  <span className="text-green-400 truncate">{(user as any).unit ?? "Unit —"}</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700" style={{ backgroundColor: "#0d1117" }}>
-                  <Shield className="w-3 h-3 text-slate-400" />
-                  <span className="text-slate-400 text-xs">{(user as any).badgeNumber ?? "Badge —"}</span>
+                <div className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg border border-slate-700 text-xs" style={{ backgroundColor: "#0d1117" }}>
+                  <Shield className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span className="text-slate-400 truncate">{(user as any).badgeNumber ?? "Badge —"}</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Shift Progress */}
-          <div className="mt-4 pt-4 border-t border-slate-700/50">
+          <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-700/50">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-amber-400 text-xs font-medium">Day Shift Active</span>
+                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-amber-400 text-xs font-medium">Day Shift</span>
               </div>
-              <span className="text-slate-500 text-xs">
+              <span className="text-slate-500 text-xs whitespace-nowrap">
                 {(user as any).shiftStart ?? "06:00"} – {(user as any).shiftEnd ?? "18:00"}
               </span>
             </div>
@@ -120,7 +120,7 @@ export function PatrolProfile() {
       </motion.div>
 
       {/* ── Today's Stats ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {[
           { label: "Cases Today",  value: statsLoading ? "…" : (patrolStats?.today.completed  ?? "—"),       icon: CheckCircle, color: "#22c55e" },
           { label: "Avg Response", value: statsLoading ? "…" : (patrolStats?.today.avgResponse ?? "—"),       icon: Zap,         color: "#f59e0b" },
@@ -132,21 +132,21 @@ export function PatrolProfile() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
-            className="rounded-2xl p-4 border border-slate-700/50 text-center"
+            className="rounded-2xl p-2.5 sm:p-4 border border-slate-700/50 text-center"
             style={{ backgroundColor: "#161b22" }}
           >
-            <s.icon className="w-5 h-5 mx-auto mb-2" style={{ color: s.color }} />
-            <div className="text-white font-bold text-lg">{s.value}</div>
+            <s.icon className="w-4 sm:w-5 h-4 sm:h-5 mx-auto mb-1.5 sm:mb-2" style={{ color: s.color }} />
+            <div className="text-white font-bold text-base sm:text-lg">{s.value}</div>
             <div className="text-slate-500 text-xs">{s.label}</div>
           </motion.div>
         ))}
       </div>
 
       {/* ── Performance Radar ── */}
-      <div className="rounded-2xl p-4 border border-slate-700/50" style={{ backgroundColor: "#161b22" }}>
+      <div className="rounded-2xl p-3 sm:p-4 border border-slate-700/50" style={{ backgroundColor: "#161b22" }}>
         <div className="flex items-center gap-2 mb-1">
-          <BarChart3 className="w-4 h-4" style={{ color: "#800000" }} />
-          <h3 className="text-white font-semibold text-sm">Performance Metrics</h3>
+          <BarChart3 className="w-4 h-4 shrink-0" style={{ color: "#800000" }} />
+          <h3 className="text-white font-semibold text-sm">Performance</h3>
         </div>
         <p className="text-slate-500 text-xs mb-4">Current month · All indicators</p>
         <ResponsiveContainer width="100%" height={220}>

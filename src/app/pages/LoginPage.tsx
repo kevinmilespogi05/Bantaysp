@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion } from "motion/react";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, Chrome } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useAuth, type UserRole } from "../context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { BantayLogo } from "../components/ui/BantayLogo";
@@ -112,18 +112,6 @@ export function LoginPage() {
           <div className="mb-8">
             <h2 className="text-gray-900 mb-1" style={{ fontSize: "1.75rem", fontWeight: 700 }}>Sign In</h2>
             <p className="text-gray-500 text-sm">Enter your credentials to access your account.</p>
-          </div>
-
-          {/* Google */}
-          <button className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-2xl py-3 mb-6 text-gray-700 hover:bg-gray-50 transition-all text-sm font-medium shadow-sm hover:shadow-md">
-            <Chrome className="w-5 h-5 text-blue-500" />
-            Continue with Google
-          </button>
-
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-gray-400 text-sm">or</span>
-            <div className="flex-1 h-px bg-gray-200" />
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">

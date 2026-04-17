@@ -78,27 +78,27 @@ export function PatrolHistory() {
   });
 
   return (
-    <div className="p-4 md:p-5 space-y-4 pb-24 md:pb-6">
+    <div className="p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4 pb-24 lg:pb-6">
 
       {/* ── Header / Stats Row ── */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl p-4 border-2 overflow-hidden relative"
+        className="rounded-2xl p-3 sm:p-4 border-2 overflow-hidden relative"
         style={{ borderColor: "#800000", backgroundColor: "#161b22" }}
       >
         <div className="absolute right-0 top-0 bottom-0 flex items-center justify-end opacity-5 pr-4">
-          <Award className="w-28 h-28" style={{ color: "#800000" }} />
+          <Award className="w-20 sm:w-28 h-20 sm:h-28" style={{ color: "#800000" }} />
         </div>
         <div className="flex items-center gap-2 mb-3 relative">
-          <TrendingUp className="w-4 h-4" style={{ color: "#800000" }} />
-          <h2 className="text-white font-bold text-sm">Patrol History</h2>
+          <TrendingUp className="w-4 h-4 shrink-0" style={{ color: "#800000" }} />
+          <h2 className="text-white font-bold text-sm">History</h2>
           <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-medium text-white" style={{ backgroundColor: "#800000" }}>
             {allHistory.length} cases
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 relative">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 relative">
           {[
             {
               label: "Resolved",
@@ -117,7 +117,7 @@ export function PatrolHistory() {
             },
           ].map((s, i) => (
             <div key={i} className="text-center">
-              <div className="text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
+              <div className="text-base sm:text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
               <div className="text-slate-500 text-xs">{s.label}</div>
             </div>
           ))}
@@ -127,27 +127,27 @@ export function PatrolHistory() {
       {/* ── Search + Filter ── */}
       <div className="flex gap-2">
         <div
-          className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl border"
+          className="flex-1 flex items-center gap-2 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl border text-xs sm:text-sm"
           style={{ backgroundColor: "#161b22", borderColor: "rgba(255,255,255,0.08)" }}
         >
           <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cases…"
-            className="flex-1 bg-transparent text-white text-sm outline-none placeholder-slate-600"
+            placeholder="Search…"
+            className="flex-1 bg-transparent text-white outline-none placeholder-slate-600 min-w-0"
           />
         </div>
 
         <div
-          className="flex items-center gap-1 px-2 py-2 rounded-xl border"
+          className="flex items-center gap-1 px-1.5 sm:px-2 py-2 sm:py-2.5 rounded-xl border"
           style={{ backgroundColor: "#161b22", borderColor: "rgba(255,255,255,0.08)" }}
         >
-          <Filter className="w-3.5 h-3.5 text-slate-500" />
+          <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" />
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as typeof filter)}
-            className="bg-transparent text-slate-300 text-xs outline-none cursor-pointer pr-1"
+            className="bg-transparent text-slate-300 text-xs outline-none cursor-pointer"
           >
             <option value="all"   className="bg-slate-800">All Time</option>
             <option value="today" className="bg-slate-800">Today</option>

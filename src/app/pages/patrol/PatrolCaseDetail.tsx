@@ -137,10 +137,10 @@ export function PatrolCaseDetail() {
   // Handle loading state
   if (loading) {
     return (
-      <div className="p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
+      <div className="p-3 sm:p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-slate-700 border-t-green-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading case details...</p>
+          <p className="text-slate-400 text-sm">Loading case details...</p>
         </div>
       </div>
     );
@@ -149,7 +149,7 @@ export function PatrolCaseDetail() {
   // Handle case not found
   if (!report) {
     return (
-      <div className="p-4 md:p-6 flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="p-3 sm:p-4 md:p-6 flex flex-col items-center justify-center min-h-[60vh]">
         <AlertTriangle className="w-12 h-12 text-amber-500 mb-4" />
         <h2 className="text-white font-semibold text-lg mb-2">Case Not Found</h2>
         <p className="text-slate-400 text-sm mb-6">This case is not available or has been archived.</p>
@@ -401,28 +401,28 @@ export function PatrolCaseDetail() {
 
   if (status === "resolved") {
     return (
-      <div className="p-4 md:p-6 flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="p-3 sm:p-4 md:p-6 flex flex-col items-center justify-center min-h-[60vh]">
         <motion.div
           initial={{ opacity: 0, scale: 0.85 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="text-center max-w-sm"
+          className="text-center max-w-sm px-4"
         >
           <div className="w-20 h-20 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center mx-auto mb-5">
             <CheckCircle className="w-10 h-10 text-green-400" />
           </div>
-          <h2 className="text-white font-bold text-xl mb-2">Case Resolved! 🎉</h2>
+          <h2 className="text-white font-bold text-lg sm:text-xl mb-2">Case Resolved! 🎉</h2>
           <p className="text-slate-400 text-sm mb-2">{report.id} · {report.title}</p>
           <p className="text-slate-500 text-xs mb-6">Resolution submitted for admin review. Great work, Officer!</p>
-          <div className="flex gap-3 justify-center">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
             <button
               onClick={() => navigate("/app/patrol/history")}
-              className="px-5 py-2.5 rounded-xl bg-green-500/20 text-green-300 text-sm hover:bg-green-500/30 transition-colors"
+              className="px-4 py-2 rounded-xl bg-green-500/20 text-green-300 text-sm hover:bg-green-500/30 transition-colors order-2 sm:order-1"
             >
               View History
             </button>
             <button
               onClick={() => navigate("/app/patrol/assigned")}
-              className="px-5 py-2.5 rounded-xl text-white text-sm font-medium transition-colors"
+              className="px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-colors order-1 sm:order-2"
               style={{ backgroundColor: "#800000" }}
             >
               Next Case
@@ -434,12 +434,12 @@ export function PatrolCaseDetail() {
   }
 
   return (
-    <div className="pb-24 md:pb-6">
+    <div className="pb-24 lg:pb-6">
       {/* ── Header ──────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-slate-700/50" style={{ backgroundColor: "#0d1117" }}>
+      <div className="sticky top-0 z-20 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-700/50" style={{ backgroundColor: "#0d1117" }}>
         <button
           onClick={() => navigate("/app/patrol")}
-          className="w-9 h-9 rounded-xl flex items-center justify-center border border-slate-700 text-slate-400 hover:text-white transition-colors"
+          className="w-9 h-9 rounded-xl flex items-center justify-center border border-slate-700 text-slate-400 hover:text-white transition-colors shrink-0"
           title="Back to Dashboard"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -450,33 +450,33 @@ export function PatrolCaseDetail() {
         </div>
       </div>
 
-      <div className="p-4 md:p-5 space-y-4">
+      <div className="p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4">
         {/* ── Priority Strip ───────────────────────────── */}
         <div
-          className="rounded-2xl border-2 p-4"
+          className="rounded-2xl border-2 p-3 sm:p-4"
           style={{ borderColor: pCfg.border, backgroundColor: pCfg.bg, boxShadow: pCfg.glow }}
         >
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-red-300" />
+            <AlertTriangle className="w-4 h-4 text-red-300 shrink-0" />
             <span className="text-red-200 text-xs font-bold">{report.category}</span>
           </div>
-          <h2 className="text-white font-bold mb-3" style={{ fontSize: "1.05rem" }}>{report.title}</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center gap-2">
+          <h2 className="text-white font-bold mb-3 text-sm sm:text-base">{report.title}</h2>
+          <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 min-w-0">
               <MapPin className="w-3.5 h-3.5 text-white/50 shrink-0" />
-              <span className="text-white/80 text-xs">{report.location}</span>
+              <span className="text-white/80 text-xs truncate">{report.location}</span>
             </div>
             <div className="flex items-center gap-2">
               <Navigation className="w-3.5 h-3.5 text-blue-300 shrink-0" />
-              <span className="text-blue-300 text-xs font-medium">{report.distance} away</span>
+              <span className="text-blue-300 text-xs font-medium">{report.distance}</span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="w-3.5 h-3.5 text-white/50 shrink-0" />
               <span className="text-white/70 text-xs">{timeAgo(report.timeReported)}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <User className="w-3.5 h-3.5 text-white/50 shrink-0" />
-              <span className="text-white/70 text-xs">{report.reporter}</span>
+              <span className="text-white/70 text-xs truncate">{report.reporter}</span>
             </div>
           </div>
         </div>

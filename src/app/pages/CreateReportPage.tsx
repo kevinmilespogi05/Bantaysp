@@ -342,94 +342,94 @@ export function CreateReportPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto px-3 sm:px-4 md:px-6">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4 md:mb-6 pt-3 sm:pt-4 md:pt-0">
         <button
           onClick={() => navigate("/app/reports")}
-          className="p-2 rounded-xl hover:bg-gray-100 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="p-2 rounded-xl hover:bg-gray-100 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
         >
           <ArrowLeft className="w-5 h-5 text-gray-500" />
         </button>
-        <div>
-          <h2 className="font-semibold text-gray-900">File a New Report</h2>
-          <p className="text-gray-400 text-sm">Document an incident in your community</p>
+        <div className="min-w-0">
+          <h2 className="font-semibold text-gray-900 text-sm sm:text-base">File Report</h2>
+          <p className="text-gray-400 text-xs sm:text-sm">Document an incident</p>
         </div>
       </div>
 
       {/* Error banner */}
       {submitError && (
-        <div className="mb-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
+        <div className="mb-3 sm:mb-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-red-700 text-xs sm:text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {submitError}
         </div>
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="grid xl:grid-cols-3 gap-6">
+        <div className="grid xl:grid-cols-3 gap-3 sm:gap-4 md:gap-6 pb-20 lg:pb-0">
           {/* Main Form */}
-          <div className="xl:col-span-2 space-y-5">
+          <div className="xl:col-span-2 space-y-3 sm:space-y-4">
             {/* Title */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <label className="block font-medium text-gray-700 mb-2 text-sm">
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-5 shadow-sm border border-gray-100">
+              <label className="block font-medium text-gray-700 mb-2 text-xs sm:text-sm">
                 Report Title <span className="text-red-500">*</span>
               </label>
               <input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Brief, descriptive title of the incident..."
+                placeholder="Brief, descriptive title..."
                 required
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none bg-white"
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-gray-200 text-xs sm:text-sm text-gray-900 outline-none bg-white"
                 onFocus={(e) => (e.target.style.borderColor = "#800000")}
                 onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
               />
             </div>
 
             {/* Description */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <label className="block font-medium text-gray-700 mb-2 text-sm">
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-5 shadow-sm border border-gray-100">
+              <label className="block font-medium text-gray-700 mb-2 text-xs sm:text-sm">
                 Description <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Describe what happened in detail. Include time of incident, number of people involved, any identifying information..."
-                rows={5}
+                placeholder="Describe what happened in detail..."
+                rows={3}
                 required
                 maxLength={500}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none resize-none bg-white"
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-gray-200 text-xs sm:text-sm text-gray-900 outline-none resize-none bg-white"
                 onFocus={(e) => (e.target.style.borderColor = "#800000")}
                 onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
               />
-              <p className="text-gray-400 text-xs mt-1">{form.description.length}/500 characters</p>
+              <p className="text-gray-400 text-xs mt-1">{form.description.length}/500</p>
             </div>
 
             {/* Private Notes to Admin */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-5 shadow-sm border border-gray-100">
               <div className="flex items-start gap-2 mb-2">
-                <div>
-                  <label className="block font-medium text-gray-700 text-sm">
+                <div className="min-w-0">
+                  <label className="block font-medium text-gray-700 text-xs sm:text-sm">
                     Private Notes for Admin
                   </label>
-                  <p className="text-gray-400 text-xs">Only administrators can see these notes</p>
+                  <p className="text-gray-400 text-xs">Only admins can see</p>
                 </div>
               </div>
               <textarea
                 value={form.admin_notes}
                 onChange={(e) => setForm({ ...form, admin_notes: e.target.value })}
-                placeholder="Optional context to help admins handle your report (not visible to the public)..."
-                rows={3}
+                placeholder="Optional context..."
+                rows={2}
                 maxLength={300}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none resize-none bg-white"
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-gray-200 text-xs sm:text-sm text-gray-900 outline-none resize-none bg-white"
                 onFocus={(e) => (e.target.style.borderColor = "#800000")}
                 onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
               />
-              <p className="text-gray-400 text-xs mt-1">{form.admin_notes.length}/300 characters</p>
+              <p className="text-gray-400 text-xs mt-1">{form.admin_notes.length}/300</p>
             </div>
 
             {/* Category */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <label className="block font-medium text-gray-700 mb-2 text-sm">
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-5 shadow-sm border border-gray-100">
+              <label className="block font-medium text-gray-700 mb-2 text-xs sm:text-sm">
                 Category <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -438,7 +438,7 @@ export function CreateReportPage() {
                     key={c}
                     type="button"
                     onClick={() => setForm({ ...form, category: c })}
-                    className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border min-h-[44px] ${
+                    className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-all border min-h-[44px] ${
                       form.category === c
                         ? "border-transparent text-white"
                         : "border-gray-200 text-gray-600 hover:border-gray-400 bg-white"
@@ -452,52 +452,52 @@ export function CreateReportPage() {
             </div>
 
             {/* Location + Map */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block font-medium text-gray-700 text-sm">
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <label className="block font-medium text-gray-700 text-xs sm:text-sm">
                   Location <span className="text-red-500">*</span>
                 </label>
                 <button
                   type="button"
                   onClick={fetchCurrentLocation}
                   disabled={geoLoading}
-                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
-                  title="Get your current location"
+                  className="flex items-center gap-1 text-xs font-medium px-2 sm:px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 shrink-0"
+                  title="Get current location"
                 >
                   <Crosshair className={`w-3.5 h-3.5 ${geoLoading ? 'animate-spin' : ''}`} />
-                  {geoLoading ? 'Getting location...' : 'Use Current Location'}
+                  <span className="hidden sm:inline">{geoLoading ? 'Getting...' : 'Use Location'}</span>
                 </button>
               </div>
 
               {/* Geolocation status message */}
               {geoError && !geoAutofilled && (
-                <div className="mb-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-700 text-xs">
+                <div className="mb-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-700 text-xs">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   {geoError}
                 </div>
               )}
 
               {geoAutofilled && (
-                <div className="mb-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-700 text-xs">
+                <div className="mb-2 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-700 text-xs">
                   <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                  Location auto-filled from device GPS
+                  Location auto-filled
                 </div>
               )}
 
-              <div className="relative mb-3">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <div className="relative mb-2">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 shrink-0" />
                 <input
                   value={form.location}
                   onChange={(e) => setForm({ ...form, location: e.target.value })}
-                  placeholder="Specific address or landmark..."
+                  placeholder="Address or landmark..."
                   required
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none bg-white"
+                  className="w-full pl-10 pr-4 py-2 sm:py-3 rounded-xl border border-gray-200 text-xs sm:text-sm text-gray-900 outline-none bg-white"
                   onFocus={(e) => (e.target.style.borderColor = "#800000")}
                   onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
                 />
               </div>
 
-              <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height: "240px" }}>
+              <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height: "200px" }}>
                 <MapContainer center={[15.0648, 120.1982]} zoom={14} className="w-full h-full" zoomControl>
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -509,34 +509,34 @@ export function CreateReportPage() {
               </div>
 
               <p className="text-gray-400 text-xs mt-2 flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
+                <MapPin className="w-3 h-3 shrink-0" />
                 {markerPos
-                  ? `Pin set: ${markerPos[0].toFixed(5)}, ${markerPos[1].toFixed(5)} — drag to adjust`
-                  : "Click on the map to drop a pin at the incident location"}
+                  ? `Pin: ${markerPos[0].toFixed(5)}, ${markerPos[1].toFixed(5)}`
+                  : "Click map to set location"}
               </p>
             </div>
           </div>
 
           {/* Sidebar (File Upload, Tips, Points, Submit) */}
-          <div className="space-y-5">
+          <div className="space-y-3 sm:space-y-4">
             {/* File Upload */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <label className="block font-medium text-gray-700 text-sm">Photos / Evidence</label>
-                  <p className="text-gray-400 text-xs">{files.length}/5 files attached</p>
+            <div className="bg-white rounded-2xl p-3 sm:p-4 md:p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <div className="min-w-0">
+                  <label className="block font-medium text-gray-700 text-xs sm:text-sm">Photos</label>
+                  <p className="text-gray-400 text-xs">{files.length}/5 files</p>
                 </div>
-                <Camera className="w-4 h-4 text-gray-400" />
+                <Camera className="w-4 h-4 text-gray-400 shrink-0" />
               </div>
               {files.length > 0 && (
                 <div className="space-y-2 mb-3">
                   {files.map((f, i) => (
                     <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2 group">
                       {f.type === "image" && f.preview ? (
-                        <img src={f.preview} alt={f.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
+                        <img src={f.preview} alt={f.name} className="w-8 h-8 object-cover rounded-lg shrink-0" />
                       ) : (
-                        <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
-                          <File className="w-5 h-5 text-gray-500" />
+                        <div className="w-8 h-8 rounded-lg bg-gray-200 flex items-center justify-center shrink-0">
+                          <File className="w-4 h-4 text-gray-500" />
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
@@ -546,9 +546,9 @@ export function CreateReportPage() {
                       <button
                         type="button"
                         onClick={() => removeFile(i)}
-                        className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                       >
-                        <X className="w-3.5 h-3.5 text-red-500" />
+                        <X className="w-3 h-3 text-red-500" />
                       </button>
                     </div>
                   ))}
@@ -565,8 +565,7 @@ export function CreateReportPage() {
               <input
                 ref={cameraInputRef}
                 type="file"
-                accept="image/*"
-                capture="environment"
+                capture
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -576,42 +575,42 @@ export function CreateReportPage() {
                     <button
                       type="button"
                       onClick={() => cameraInputRef.current?.click()}
-                      className="w-full border-2 border-solid border-blue-300 bg-blue-50 rounded-xl py-3 flex items-center justify-center gap-2 hover:border-blue-400 hover:bg-blue-100 transition-colors text-blue-600 font-medium text-sm min-h-[44px]"
+                      className="w-full border-2 border-solid border-blue-300 bg-blue-50 rounded-xl py-2.5 sm:py-3 flex items-center justify-center gap-2 hover:border-blue-400 hover:bg-blue-100 transition-colors text-blue-600 font-medium text-xs sm:text-sm min-h-[44px]"
                       title="Capture photo using device camera"
                     >
-                      <Camera className="w-5 h-5" />
-                      Take Photo with Camera
+                      <Camera className="w-4 sm:w-5 h-4 sm:h-5" />
+                      <span className="hidden xs:inline">Take Photo</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex flex-col items-center gap-2 hover:border-gray-400 transition-colors text-gray-400 hover:text-gray-600"
+                    className="w-full border-2 border-dashed border-gray-200 rounded-xl py-3 sm:py-4 flex flex-col items-center gap-1.5 hover:border-gray-400 transition-colors text-gray-400 hover:text-gray-600"
                   >
-                    <Upload className="w-6 h-6" />
-                    <span className="text-sm font-medium">Upload Photos or Files</span>
-                    <span className="text-xs">Images, PDF, DOC up to 10MB</span>
+                    <Upload className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span className="text-xs sm:text-sm font-medium">Upload</span>
+                    <span className="text-xs">up to 10MB</span>
                   </button>
                 </div>
               )}
             </div>
 
             {/* Tips */}
-            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 sm:p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Info className="w-4 h-4 text-blue-500 shrink-0" />
-                <span className="text-blue-700 font-medium text-sm">Reporting Tips</span>
+                <span className="text-blue-700 font-medium text-xs sm:text-sm">Tips</span>
               </div>
-              <ul className="space-y-1.5">
+              <ul className="space-y-1">
                 {[
-                  "Be specific with location details",
+                  "Be specific with location",
                   "Include time of incident",
                   "Attach photos as evidence",
-                  "Stay safe — don't put yourself at risk",
-                  "Only submit verified incidents",
+                  "Stay safe",
+                  "Verify incidents",
                 ].map((tip) => (
                   <li key={tip} className="flex items-start gap-2 text-blue-600 text-xs">
-                    <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <CheckCircle className="w-3 h-3 shrink-0 mt-0.5" />
                     {tip}
                   </li>
                 ))}
@@ -619,13 +618,13 @@ export function CreateReportPage() {
             </div>
 
             {/* Points Info */}
-            <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: "#800000" }}>
+            <div className="rounded-2xl p-3 sm:p-4 text-white" style={{ backgroundColor: "#800000" }}>
               <div className="flex items-center gap-2 mb-2">
-                <FileText className="w-4 h-4" />
-                <span className="font-medium text-sm">Civic Points</span>
+                <FileText className="w-4 h-4 shrink-0" />
+                <span className="font-medium text-xs sm:text-sm">Civic Points</span>
               </div>
               <div className="text-white/80 text-xs leading-relaxed">
-                <strong className="text-white">+50 points</strong> when admin verifies your report. <strong className="text-white">+25 bonus</strong> if resolved!
+                <strong className="text-white">+50 points</strong> when verified. <strong className="text-white">+25 bonus</strong> if resolved!
               </div>
             </div>
 
@@ -633,23 +632,23 @@ export function CreateReportPage() {
             <button
               type="submit"
               disabled={submitting || uploadingImage || !form.title || !form.description || !form.category || !form.location}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-semibold text-sm transition-all hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:scale-100 min-h-[52px]"
+              className="w-full flex items-center justify-center gap-2 py-2.5 sm:py-3.5 rounded-2xl text-white font-semibold text-xs sm:text-sm transition-all hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:scale-100 min-h-[52px]"
               style={{ backgroundColor: "#800000" }}
             >
               {uploadingImage ? (
                 <>
                   <Loader className="w-4 h-4 animate-spin" />
-                  {uploadProgress || "Uploading image..."}
+                  <span className="hidden xs:inline">{uploadProgress || "Uploading..."}</span>
                 </>
               ) : submitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Submitting...
+                  <span className="hidden xs:inline">Submitting...</span>
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  Submit Report
+                  <span className="hidden xs:inline">Submit Report</span>
                 </>
               )}
             </button>
