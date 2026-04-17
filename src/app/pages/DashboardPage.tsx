@@ -33,9 +33,9 @@ import { BantayLogo } from "../components/ui/BantayLogo";
 // ─── Status / Priority helpers ────────────────────────────────────────────────
 
 const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
-  pending:     { bg: "bg-amber-100", text: "text-amber-700",  label: "Pending" },
-  in_progress: { bg: "bg-blue-100",  text: "text-blue-700",   label: "In Progress" },
-  accepted:    { bg: "bg-purple-100", text: "text-purple-700", label: "Accepted" },
+  pending_verification: { bg: "bg-amber-100", text: "text-amber-700",  label: "Pending Verification" },
+  approved:    { bg: "bg-blue-100",  text: "text-blue-700",   label: "Approved" },
+  in_progress: { bg: "bg-cyan-100", text: "text-cyan-700", label: "In Progress" },
   resolved:    { bg: "bg-green-100", text: "text-green-700",  label: "Resolved" },
 };
 const priorityDot: Record<string, string> = {
@@ -291,7 +291,7 @@ export function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>{s.label}</span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${s?.bg} ${s?.text}`}>{s?.label || r.status}</span>
                       <span className="text-gray-400 text-xs hidden md:block">
                         {new Date(r.timestamp).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
                       </span>

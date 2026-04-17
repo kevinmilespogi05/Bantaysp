@@ -781,19 +781,19 @@ app.get("/dashboard/stats", async (req, res) => {
       .from("user_profiles")
       .select("*", { count: "exact", head: true });
 
-    // Calculate status counts
+    // Calculate status counts - ONLY count visible reports (excluding pending_verification)
     const reports = allReports || [];
-    const pending = reports.filter((r: any) => r.status === "pending").length;
+    const visibleReports = reports.filter((r: any) => r.status !== "pending_verification");
     const inProgress = reports.filter((r: any) => r.status === "in_progress").length;
     const resolved = reports.filter((r: any) => r.status === "resolved").length;
-    const totalReports = reports.length;
+    const totalReports = visibleReports.length;  // Only count approved, in_progress, resolved
 
-    // Calculate response rate (resolved / total)
+    // Calculate response rate (resolved / total visible)
     const responseRate = totalReports > 0 ? Math.round((resolved / totalReports) * 100) : 0;
 
     res.json({
       totalReports,
-      pending,
+      pending: 0,  // Don't show pending count - it's for admin only
       inProgress,
       resolved,
       activeCitizens: userCount || 0,
@@ -813,8 +813,8 @@ app.get("/reports", async (req, res) => {
 
     const { data: reports, error } = await supabase
       .from("reports")
-      .select("*")
-      .in("status", ["approved", "in_progress", "resolved"])
+      .select("*, is_anonymous")
+      .in("status", ["approved", "accepted", "submitted", "in_progress", "resolved"])
       .order("created_at", { ascending: false })
       .limit(100);
 
@@ -830,7 +830,7 @@ app.get("/reports", async (req, res) => {
 /** POST /reports - Create a new report */
 app.post("/reports", async (req, res) => {
   try {
-    const { title, description, category, location, image_url, location_lat, location_lng } = req.body;
+    const { title, description, category, location, image_url, location_lat, location_lng, admin_notes } = req.body;
 
     // Validate required fields
     if (!title || !description || !category || !location) {
@@ -962,6 +962,7 @@ app.post("/reports", async (req, res) => {
           user_id: userId,
           comments: 0,
           upvotes: 0,
+          admin_notes: admin_notes || null,
         },
       ])
       .select();
@@ -972,6 +973,10 @@ app.post("/reports", async (req, res) => {
     }
 
     console.log(`[CreateReport] ✅ Report created: ${reportId}`);
+    
+    // Add initial system log for report creation
+    await addSystemLog(reportId, "Report Created", `Report submitted by ${reporterName} in ${location}`);
+    
     res.status(201).json(data?.[0] || { success: true, id: reportId });
   } catch (err) {
     console.error(`[CreateReport] Error:`, err);
@@ -979,21 +984,86 @@ app.post("/reports", async (req, res) => {
   }
 });
 
-/** GET /reports/:id/comments - Fetch comments for a report */
+/** GET /reports/:id/comments - Fetch comments for a report (including patrol updates and system logs) */
 app.get("/reports/:id/comments", async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`[GetComments] Fetching comments for report: ${id}`);
 
-    const { data: comments, error } = await supabase
+    // Fetch report to check is_anonymous flag
+    const { data: reportData, error: reportError } = await supabase
+      .from("reports")
+      .select("is_anonymous")
+      .eq("id", id)
+      .single();
+
+    const isAnonymous = reportData?.is_anonymous ?? false;
+
+    // Fetch regular resident comments
+    const { data: regularComments, error: regularError } = await supabase
       .from("comments")
-      .select("id, author, avatar, text, time")
+      .select("id, author, avatar, text, created_at")
       .eq("report_id", id)
       .order("created_at", { ascending: true });
 
-    if (error) throw error;
+    if (regularError) {
+      console.warn("[GetComments] Regular comments fetch warning:", regularError);
+    }
 
-    res.json(comments || []);
+    // Fetch patrol comments
+    const { data: patrolComments, error: patrolError } = await supabase
+      .from("patrol_comments")
+      .select("id, comment_text, author_role, created_at")
+      .eq("report_id", id)
+      .order("created_at", { ascending: true });
+
+    if (patrolError) {
+      console.warn("[GetComments] Patrol comments fetch warning:", patrolError);
+    }
+
+    // Fetch patrol logs (system logs and status updates)
+    const { data: patrolLogs, error: logsError } = await supabase
+      .from("patrol_logs")
+      .select("id, log_type, title, details, created_at")
+      .eq("report_id", id)
+      .order("created_at", { ascending: true });
+
+    if (logsError) {
+      console.warn("[GetComments] Patrol logs fetch warning:", logsError);
+    }
+
+    // Merge and format comments
+    const allComments = [
+      ...(regularComments || []).map(c => ({
+        id: c.id,
+        author: isAnonymous ? "Anonymous Resident" : c.author,
+        avatar: c.avatar,
+        text: c.text,
+        time: new Date(c.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+        author_role: "resident",
+      })),
+      ...(patrolComments || []).map(c => ({
+        id: c.id,
+        author: c.author_role === "system" ? "📋 System Log" : "Patrol Officer",
+        avatar: c.author_role === "system" ? "📋" : "P",
+        text: c.comment_text,
+        time: new Date(c.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+        author_role: c.author_role === "system" ? "system" : "patrol",
+      })),
+      ...(patrolLogs || []).map(log => ({
+        id: log.id,
+        author: log.log_type === "system" ? "📋 System" : "👮 Patrol",
+        avatar: log.log_type === "system" ? "📋" : "👮",
+        text: `${log.title}${log.details ? ` - ${log.details}` : ""}`,
+        time: new Date(log.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+        author_role: log.log_type,
+      })),
+    ];
+
+    // Sort by created_at chronologically
+    allComments.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+    res.json(allComments);
   } catch (err) {
     console.error(`[GetComments] Error:`, err);
     res.status(500).json({ error: "Failed to fetch comments" });
@@ -1963,7 +2033,7 @@ app.get("/admin/reports/pending", async (req, res) => {
 
     const { data: pendingReports, error } = await supabase
       .from("reports")
-      .select("id, title, description, category, location, status, reporter, avatar, image_url, created_at, comments, upvotes, user_id, admin_notes")
+      .select("id, title, description, category, location, status, reporter, avatar, image_url, created_at, comments, upvotes, user_id, admin_notes, is_anonymous")
       .eq("status", "pending_verification")
       .order("created_at", { ascending: true });
 
@@ -1993,10 +2063,16 @@ app.post("/admin/reports/:id/approve", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    if (!adminUser.id) {
+      console.error("[ApproveReport] Admin user has no ID");
+      return res.status(401).json({ error: "Invalid admin user" });
+    }
+
     console.log(`[ApproveReport] Admin ${adminUser.id} approving report ${id}`);
 
-    // Update report status to approved
+    // Update report status to approved with full details
     const now = new Date().toISOString();
+    
     const { data: approvedReport, error: updateError } = await supabase
       .from("reports")
       .update({
@@ -2006,17 +2082,50 @@ app.post("/admin/reports/:id/approve", async (req, res) => {
         verified: true,
       })
       .eq("id", id)
-      .select()
-      .single();
+      .select();
 
-    if (updateError || !approvedReport) {
-      console.error("[ApproveReport] Error updating report:", updateError);
+    if (updateError || !approvedReport || approvedReport.length === 0) {
+      console.error("[ApproveReport] Error approving report:", updateError);
       return res.status(500).json({ error: "Failed to approve report" });
     }
 
-    // Note: Points award is deferred - will be handled by database triggers or batch jobs
+    const updatedReport = approvedReport[0];
+
+    // Award 50 points to the reporter by updating user_profiles
+    if (updatedReport.user_id) {
+      try {
+        // Get current points
+        const { data: userProfile } = await supabase
+          .from("user_profiles")
+          .select("points")
+          .eq("id", updatedReport.user_id)
+          .single();
+
+        const currentPoints = userProfile?.points || 0;
+        const newPoints = currentPoints + 50;
+
+        // Update with new points total
+        const { error: pointsError } = await supabase
+          .from("user_profiles")
+          .update({ points: newPoints })
+          .eq("id", updatedReport.user_id);
+
+        if (pointsError) {
+          console.warn("[ApproveReport] Could not update user points:", pointsError);
+        } else {
+          console.log(`[ApproveReport] ✅ Awarded 50 points to user ${updatedReport.user_id} (total: ${newPoints})`);
+        }
+      } catch (err) {
+        console.warn("[ApproveReport] Error updating points:", err);
+      }
+    }
+    
     console.log(`[ApproveReport] ✅ Report ${id} approved`);
-    res.json({ success: true, message: "Report approved successfully", report: approvedReport });
+    
+    // Add system log for report approval
+    await addSystemLog(id, "Report Approved", "Admin approved report and assigned to patrol queue. Reporter awarded 50 points.");
+    
+    res.json({ success: true, message: "Report approved successfully", report: updatedReport });
   } catch (err) {
     console.error("[ApproveReport] Error:", err);
     res.status(500).json({ error: "Failed to approve report" });
@@ -2067,6 +2176,239 @@ app.post("/admin/reports/:id/reject", async (req, res) => {
   } catch (err) {
     console.error("[RejectReport] Error:", err);
     res.status(500).json({ error: "Failed to reject report" });
+  }
+});
+
+/** POST /admin/reports/:id/toggle-anonymous - Toggle anonymous flag for a report */
+app.post("/admin/reports/:id/toggle-anonymous", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    // Get admin user ID from token
+    const { data: { user: adminUser }, error: userError } = await supabase.auth.getUser(token);
+    if (!adminUser || userError) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log(`[ToggleAnonymous] Admin ${adminUser.id} toggling anonymous flag for report ${id}`);
+
+    // Get current anonymous status
+    const { data: report, error: fetchError } = await supabase
+      .from("reports")
+      .select("id, is_anonymous")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !report) {
+      console.error("[ToggleAnonymous] Report not found:", fetchError);
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    // Toggle the anonymous flag
+    const newAnonymousStatus = !report.is_anonymous;
+    const { error: updateError } = await supabase
+      .from("reports")
+      .update({ is_anonymous: newAnonymousStatus })
+      .eq("id", id);
+
+    if (updateError) {
+      console.error("[ToggleAnonymous] Error updating report:", updateError);
+      return res.status(500).json({ error: "Failed to toggle anonymous flag" });
+    }
+
+    console.log(`[ToggleAnonymous] ✅ Report ${id} anonymous flag set to ${newAnonymousStatus}`);
+    res.json({ 
+      success: true, 
+      reportId: id, 
+      isAnonymous: newAnonymousStatus,
+      message: newAnonymousStatus ? "Report marked as anonymous" : "Report marked as public"
+    });
+  } catch (err) {
+    console.error("[ToggleAnonymous] Error:", err);
+    res.status(500).json({ error: "Failed to toggle anonymous flag" });
+  }
+});
+
+/** POST /admin/patrol-resolutions/:id/verify - Admin verifies patrol resolution */
+app.post("/admin/patrol-resolutions/:id/verify", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approved, adminNotes } = req.body;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    console.log(`[VerifyResolution] ▶ Starting verification for case ${id}, approved=${approved}`);
+
+    // Get admin user ID from token
+    const { data: { user: adminUser }, error: userError } = await supabase.auth.getUser(token);
+    if (!adminUser || userError) {
+      console.error("[VerifyResolution] ✗ Auth failed:", userError);
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log(`[VerifyResolution] ✓ Admin authenticated: ${adminUser.id}`);
+
+    // Get the report
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (reportError || !report) {
+      console.error("[VerifyResolution] ✗ Report fetch error:", reportError);
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    console.log(`[VerifyResolution] ✓ Report found. Status: ${report.status}, resolved_by: ${report.resolved_by}`);
+
+    // Report must be in submitted status
+    if (report.status !== "submitted") {
+      console.error(`[VerifyResolution] ✗ Wrong status: ${report.status}`);
+      return res.status(400).json({ error: `Report must be in submitted status. Current status: ${report.status}` });
+    }
+
+    const newStatus = approved ? "resolved" : "in_progress";
+    const now = new Date().toISOString();
+
+    console.log(`[VerifyResolution] → Updating report status to: ${newStatus}`);
+
+    // Update report status
+    const { data: updatedReport, error: updateError } = await supabase
+      .from("reports")
+      .update({
+        status: newStatus,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error("[VerifyResolution] ✗ Report update error:", updateError);
+      return res.status(500).json({ error: "Failed to verify resolution", details: updateError.message });
+    }
+
+    console.log(`[VerifyResolution] ✓ Report status updated to ${newStatus}`);
+
+    // If approved, award points to both patrol officer and reporter
+    if (approved) {
+      // Award points to patrol officer who submitted the resolution
+      if (report.resolved_by) {
+        try {
+          console.log(`[VerifyResolution] → Awarding points to patrol officer: ${report.resolved_by}`);
+          
+          const { data: patrolProfile, error: patrolError } = await supabase
+            .from("user_profiles")
+            .select("points")
+            .eq("id", report.resolved_by)
+            .single();
+
+          if (patrolError) {
+            console.warn("[VerifyResolution] ⚠ Patrol profile fetch error:", patrolError);
+          } else {
+            const patrolCurrentPoints = patrolProfile?.points || 0;
+            const patrolNewPoints = patrolCurrentPoints + 25;
+
+            console.log(`[VerifyResolution] → Updating patrol points: ${patrolCurrentPoints} → ${patrolNewPoints}`);
+
+            const { error: patrolPointsError } = await supabase
+              .from("user_profiles")
+              .update({ points: patrolNewPoints })
+              .eq("id", report.resolved_by);
+
+            if (patrolPointsError) {
+              console.warn("[VerifyResolution] ⚠ Patrol points update error:", patrolPointsError);
+            } else {
+              console.log(`[VerifyResolution] ✓ Awarded 25 points to patrol ${report.resolved_by} (total: ${patrolNewPoints})`);
+            }
+          }
+        } catch (err) {
+          console.warn("[VerifyResolution] ⚠ Error updating patrol points:", err);
+        }
+      }
+
+      // Award points to reporter (original report submitter)
+      if (report.user_id) {
+        try {
+          console.log(`[VerifyResolution] → Awarding points to reporter: ${report.user_id}`);
+          
+          const { data: reporterProfile, error: reporterError } = await supabase
+            .from("user_profiles")
+            .select("points")
+            .eq("id", report.user_id)
+            .single();
+
+          if (reporterError) {
+            console.warn("[VerifyResolution] ⚠ Reporter profile fetch error:", reporterError);
+          } else {
+            const reporterCurrentPoints = reporterProfile?.points || 0;
+            const reporterNewPoints = reporterCurrentPoints + 10;
+
+            console.log(`[VerifyResolution] → Updating reporter points: ${reporterCurrentPoints} → ${reporterNewPoints}`);
+
+            const { error: reporterPointsError } = await supabase
+              .from("user_profiles")
+              .update({ points: reporterNewPoints })
+              .eq("id", report.user_id);
+
+            if (reporterPointsError) {
+              console.warn("[VerifyResolution] ⚠ Reporter points update error:", reporterPointsError);
+            } else {
+              console.log(`[VerifyResolution] ✓ Awarded 10 points to reporter ${report.user_id} (total: ${reporterNewPoints})`);
+            }
+          }
+        } catch (err) {
+          console.warn("[VerifyResolution] ⚠ Error updating reporter points:", err);
+        }
+      }
+    }
+
+    const action = approved ? "approved" : "rejected (reverted to in_progress)";
+    console.log(`[VerifyResolution] ✅ Resolution for case ${id} ${action} by admin ${adminUser.id}`);
+
+    // Add system log for verification
+    const logTitle = approved ? "Resolution Approved" : "Resolution Rejected";
+    const logDetails = approved 
+      ? `Admin verified and approved resolution. Patrol officer awarded 25 points, reporter awarded 10 points.`
+      : `Admin rejected resolution. Case reverted to in_progress status.`;
+    await addSystemLog(id, logTitle, logDetails);
+
+    res.json({
+      success: true,
+      message: `Resolution ${approved ? "approved" : "rejected"}`,
+      reportId: id,
+      newStatus,
+      report: updatedReport,
+    });
+  } catch (err) {
+    console.error("[VerifyResolution] ✗ Unhandled error:", err);
+    res.status(500).json({ error: "Failed to verify resolution", details: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** GET /admin/patrol-resolutions/pending - Get patrol resolutions submitted for verification */
+app.get("/admin/patrol-resolutions/pending", async (req, res) => {
+  try {
+    console.log("[AdminPatrolResolutions] Fetching submitted resolutions...");
+    
+    const { data: reports, error } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("status", "submitted")
+      .order("timestamp", { ascending: false });
+    
+    if (error) {
+      console.error("[AdminPatrolResolutions] Supabase error:", error);
+      throw error;
+    }
+    
+    console.log(`[AdminPatrolResolutions] Found ${reports?.length || 0} submitted resolutions`);
+    res.json(reports || []);
+  } catch (err) {
+    console.error("[AdminPatrolResolutions] Error:", err);
+    res.status(500).json({ error: "Failed to fetch submitted resolutions" });
   }
 });
 
@@ -2206,6 +2548,33 @@ app.put("/announcements/:id", async (req, res) => {
   }
 });
 
+// ─── Helper: Add System Log ─────────────────────────────────────────────────
+
+async function addSystemLog(reportId: string, action: string, details: string = "") {
+  try {
+    const { data, error } = await supabase
+      .from("patrol_logs")
+      .insert([{
+        report_id: reportId,
+        log_type: "system",
+        title: action,
+        details: details || null,
+        created_by: null,
+        created_at: new Date().toISOString(),
+      }])
+      .select("*")
+      .single();
+
+    if (error) {
+      console.warn(`[SystemLog] Failed to add log for report ${reportId}:`, error);
+    } else {
+      console.log(`[SystemLog] ✓ Logged: ${action} for report ${reportId}`);
+    }
+  } catch (err) {
+    console.error(`[SystemLog] Error:`, err);
+  }
+}
+
 // ─── Patrol Endpoints ─────────────────────────────────────────────────────────
 
 /** GET /patrol/active-case - Get the currently active case for patrol officer */
@@ -2213,8 +2582,28 @@ app.get("/patrol/active-case", async (req, res) => {
   try {
     console.log("[PatrolActiveCase] Fetching active case for patrol officer...");
     
-    // Get patrol officer's ID from query parameter (should come from auth in real implementation)
-    const patrolId = req.query.patrolId || "PAT-001";
+    // Get patrol officer's ID from auth token
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+    
+    let patrolId = req.query.patrolId as string;
+    
+    // If token provided, get ID from auth
+    if (token && token !== "") {
+      try {
+        const { data: { user: patrolUser }, error: userError } = await supabase.auth.getUser(token);
+        if (patrolUser && !userError) {
+          patrolId = patrolUser.id;
+        }
+      } catch (err) {
+        console.log("[PatrolActiveCase] Could not get user from token, using query parameter");
+      }
+    }
+    
+    if (!patrolId) {
+      patrolId = "PAT-001";
+    }
+    
     console.log(`[PatrolActiveCase] Looking for cases accepted by: ${patrolId}`);
     
     // First check in-memory patrol incidents store
@@ -2254,11 +2643,11 @@ app.get("/patrol/active-case", async (req, res) => {
       });
     }
     
-    // Fall back to Supabase reports table for accepted reports
+    // Fall back to Supabase reports table for accepted/in-progress reports
     console.log("[PatrolActiveCase] No active case in store, checking Supabase...");
     const { data: reports, error } = await supabase
       .from("reports")
-      .select("*")
+      .select("id, title, category, location, timestamp, status, patrol_assigned_to, description, user_id, reporter, is_anonymous")
       .eq("patrol_assigned_to", patrolId)
       .in("status", ["accepted", "in_progress"])
       .limit(1);
@@ -2276,18 +2665,38 @@ app.get("/patrol/active-case", async (req, res) => {
     const report = reports[0];
     console.log(`[PatrolActiveCase] Found active case in Supabase: ${report.id} (${report.title})`);
     
+    // Get reporter name from user_profiles if user_id exists, otherwise use stored reporter name
+    let reporterName = report.reporter || "Anonymous";
+    let reporterAvatar = "AN";
+    
+    // Check if anonymous flag is set
+    if (report.is_anonymous) {
+      reporterName = "Anonymous Resident";
+    } else if (report.user_id) {
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("first_name, last_name, avatar")
+        .eq("auth_user_id", report.user_id)
+        .single();
+      
+      if (profile) {
+        reporterName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || report.reporter || "Anonymous";
+        reporterAvatar = profile.avatar || "AN";
+      }
+    }
+    
     res.json({
       id: report.id,
       title: report.title,
       category: report.category || "General",
-      priority: report.priority || "medium",
+      priority: "medium",
       location: report.location,
       address: report.location,
       distance: "250m",
       eta: "2 min",
       timeReported: report.timestamp,
-      reporter: report.author_email || "Anonymous",
-      reporterAvatar: "AN",
+      reporter: reporterName,
+      reporterAvatar,
       reporterContact: "N/A",
       reporterNotes: report.description || "",
       status: report.status,
@@ -2307,30 +2716,129 @@ app.get("/patrol/assigned", async (req, res) => {
   try {
     console.log("[PatrolAssigned] Fetching assigned reports...");
     
-    // Query from patrol incidents store instead of reports table
-    const incidents: PatrolIncident[] = Array.from(patrolIncidentsStore.values());
+    // Get patrol officer's ID from auth token
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+    let patrolId = "";
     
-    const reports = incidents
-      .filter(i => i.status === "pending" || (i.assignedPatrol && i.assignedPatrol !== "PAT-001"))
-      .map(i => ({
-        id: i.id,
-        title: i.title,
-        category: i.category,
-        priority: i.priority,
-        location: i.address,
-        distance: "N/A",
-        timeReported: i.timeReported,
-        status: i.status,
-        reporter: i.reporter || "Anonymous",
-        reporterAvatar: i.reporterAvatar || "AN",
-        description: i.reporterNotes || "",
-      }));
+    if (token) {
+      try {
+        const { data: { user: patrolUser } } = await supabase.auth.getUser(token);
+        if (patrolUser) patrolId = patrolUser.id;
+      } catch (err) {
+        console.log("[PatrolAssigned] Could not get user from token");
+      }
+    }
+    
+    // Fetch assigned reports from Supabase
+    const { data: supabaseReports, error: dbError } = await supabase
+      .from("reports")
+      .select("id, title, category, location, timestamp, status, description, user_id, reporter, is_anonymous")
+      .eq("patrol_assigned_to", patrolId || "")
+      .in("status", ["pending", "assigned", "accepted"])
+      .order("timestamp", { ascending: false });
+    
+    if (dbError) {
+      console.warn("[PatrolAssigned] Supabase query error", dbError);
+      return res.json([]);
+    }
+    
+    // Enrich reports with reporter names
+    const reports = await Promise.all(
+      (supabaseReports || []).map(async (report) => {
+        // Get reporter name from user_profiles if user_id exists, otherwise use stored reporter name
+        let reporterName = report.reporter || "Anonymous";
+        let reporterAvatar = "AN";
+        
+        // Check if anonymous flag is set
+        if (report.is_anonymous) {
+          reporterName = "Anonymous Resident";
+        } else if (report.user_id) {
+          const { data: profile } = await supabase
+            .from("user_profiles")
+            .select("first_name, last_name, avatar")
+            .eq("auth_user_id", report.user_id)
+            .single();
+          
+          if (profile) {
+            reporterName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || report.reporter || "Anonymous";
+            reporterAvatar = profile.avatar || "AN";
+          }
+        }
+        
+        return {
+          id: report.id,
+          title: report.title,
+          category: report.category,
+          priority: "medium",
+          location: report.location,
+          distance: "N/A",
+          timeReported: report.timestamp,
+          status: report.status,
+          reporter: reporterName,
+          reporterAvatar,
+          description: report.description || "",
+        };
+      })
+    );
     
     console.log(`[PatrolAssigned] Found ${reports.length} assigned reports`);
     res.json(reports);
   } catch (err) {
     console.error("[PatrolAssigned] Error:", err);
     res.status(500).json({ error: "Failed to fetch assigned reports" });
+  }
+});
+
+/** GET /patrol/submitted - Get all submitted reports awaiting admin review for the current patrol officer */
+app.get("/patrol/submitted", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    // Get patrol user ID from token
+    const { data: { user: patrolUser }, error: userError } = await supabase.auth.getUser(token);
+    if (!patrolUser || userError) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log(`[PatrolSubmitted] Fetching submitted reports for patrol ${patrolUser.id}...`);
+
+    // Query database for submitted reports resolved by this patrol officer
+    const { data: submittedReports, error: queryError } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("resolved_by", patrolUser.id)
+      .eq("status", "submitted")
+      .order("created_at", { ascending: false });
+
+    if (queryError) {
+      console.error("[PatrolSubmitted] Query error:", queryError);
+      return res.status(500).json({ error: "Failed to fetch submitted reports" });
+    }
+
+    // Format reports for UI
+    const reports = (submittedReports || []).map((r) => ({
+      id: r.id,
+      title: r.title,
+      category: r.category,
+      priority: r.priority || "medium",
+      location: r.location,
+      distance: "N/A",
+      timeReported: r.created_at,
+      status: r.status,
+      reporter: r.reporter_name || "Anonymous",
+      reporterAvatar: r.reporter_name?.substring(0, 2).toUpperCase() || "AN",
+      description: r.description || "",
+      resolution_notes: r.resolution_notes,
+      resolution_evidence_url: r.resolution_evidence_url,
+    }));
+
+    console.log(`[PatrolSubmitted] Found ${reports.length} submitted reports for patrol ${patrolUser.id}`);
+    res.json(reports);
+  } catch (err) {
+    console.error("[PatrolSubmitted] Error:", err);
+    res.status(500).json({ error: "Failed to fetch submitted reports" });
   }
 });
 
@@ -2350,6 +2858,27 @@ app.post("/patrol/cases/:id/accept", async (req, res) => {
     const patrolId = patrolUser.id;
     console.log(`[PatrolCaseAccept] Patrol ${patrolId} accepting case ${caseId}...`);
     
+    // Check if patrol officer already has an active case
+    console.log(`[PatrolCaseAccept] Checking for active cases assigned to ${patrolId}...`);
+    const { data: activeCases, error: activeError } = await supabase
+      .from("reports")
+      .select("id, status")
+      .eq("patrol_assigned_to", patrolId)
+      .in("status", ["accepted", "in_progress"]);
+    
+    if (activeError) {
+      console.error(`[PatrolCaseAccept] Error checking active cases:`, activeError);
+      return res.status(500).json({ error: "Failed to check active cases" });
+    }
+    
+    if (activeCases && activeCases.length > 0) {
+      console.log(`[PatrolCaseAccept] Patrol ${patrolId} already has ${activeCases.length} active case(s): ${activeCases.map(c => c.id).join(", ")}`);
+      return res.status(400).json({ 
+        error: `You can only handle 1 case at a time. You currently have 1 active case. Please complete or cancel it first.`,
+        activeCase: activeCases[0]
+      });
+    }
+    
     // Get the report from Supabase
     const { data: report, error: reportError } = await supabase
       .from("reports")
@@ -2367,12 +2896,13 @@ app.post("/patrol/cases/:id/accept", async (req, res) => {
       return res.status(400).json({ error: `Report must be approved before patrol can accept it. Current status: ${report.status}` });
     }
     
-    // Update the report to in_progress status
+    // Update the report: set status to "accepted" when patrol accepts the case
+    // The UI will show "In Progress" button to let patrol officer mark it as responding
     const now = new Date().toISOString();
     const { data: updatedReport, error: updateError } = await supabase
       .from("reports")
       .update({ 
-        status: "in_progress",
+        status: "accepted",  // Patrol has accepted, now awaiting "In Progress" click
         patrol_assigned_to: patrolId,
         resolved_by: patrolId,  // Will be updated to show who's handling it
       })
@@ -2385,16 +2915,98 @@ app.post("/patrol/cases/:id/accept", async (req, res) => {
       return res.status(500).json({ error: "Failed to accept case" });
     }
     
-    console.log(`[PatrolCaseAccept] ✅ Case ${caseId} accepted by ${patrolId}, status changed to in_progress`);
+    console.log(`[PatrolCaseAccept] ✅ Case ${caseId} accepted by ${patrolId}, patrol assigned`);
+    
+    // Add system log
+    await addSystemLog(caseId, "Report accepted by Patrol Officer", `Case assigned to patrol for response`);
     
     res.json({
       success: true,
-      message: `Case accepted and status changed to in_progress`,
+      message: `Case accepted, patrol officer assigned`,
       report: updatedReport
     });
   } catch (err) {
     console.error("[PatrolCaseAccept] Error:", err);
     res.status(500).json({ error: "Failed to accept case" });
+  }
+});
+
+/** POST /patrol/cases/:id/start-responding - Mark case as in_progress (responding) */
+app.post("/patrol/cases/:id/start-responding", async (req, res) => {
+  try {
+    const caseId = req.params.id;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    // Get patrol user ID from token
+    const { data: { user: patrolUser }, error: userError } = await supabase.auth.getUser(token);
+    if (!patrolUser || userError) {
+      console.error(`[PatrolStartResponding] Auth error:`, userError);
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log(`[PatrolStartResponding] Patrol ${patrolUser.id} starting response for case ${caseId}...`);
+    
+    // Get the report from Supabase
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("id", caseId)
+      .single();
+    
+    if (reportError || !report) {
+      console.error(`[PatrolStartResponding] Case ${caseId} not found:`, reportError);
+      return res.status(404).json({ error: "Case not found" });
+    }
+
+    console.log(`[PatrolStartResponding] Current case status: ${report.status}, assigned to: ${report.patrol_assigned_to}`);
+
+    // Verify this case is assigned to this patrol
+    if (report.patrol_assigned_to !== patrolUser.id) {
+      console.error(`[PatrolStartResponding] Case ${caseId} not assigned to patrol ${patrolUser.id}, assigned to: ${report.patrol_assigned_to}`);
+      return res.status(400).json({ error: "This case is not assigned to you" });
+    }
+
+    // Verify report is in accepted status (patrol has accepted, now marking as responding)
+    if (report.status !== "accepted") {
+      console.error(`[PatrolStartResponding] Wrong status: expected "accepted", got "${report.status}"`);
+      return res.status(400).json({ 
+        error: `Report must be in accepted status. Current status: ${report.status}`,
+        currentStatus: report.status,
+        expectedStatus: "accepted"
+      });
+    }
+
+    // Update the report to in_progress status
+    console.log(`[PatrolStartResponding] Updating status to in_progress...`);
+    const { data: updatedReport, error: updateError } = await supabase
+      .from("reports")
+      .update({ 
+        status: "in_progress",
+        patrol_assigned_to: patrolUser.id,
+      })
+      .eq("id", caseId)
+      .select()
+      .single();
+    
+    if (updateError) {
+      console.error(`[PatrolStartResponding] Error updating report:`, updateError);
+      return res.status(500).json({ error: "Failed to start responding", details: updateError });
+    }
+
+    console.log(`[PatrolStartResponding] ✅ Case ${caseId} marked as in_progress by ${patrolUser.id}, new status: ${updatedReport.status}`);
+    
+    // Add system log
+    await addSystemLog(caseId, "Report Status: In Progress", "Patrol Officer is actively responding to the incident");
+    
+    res.json({
+      success: true,
+      message: `Case marked as in_progress`,
+      report: updatedReport
+    });
+  } catch (err) {
+    console.error("[PatrolStartResponding] Error:", err);
+    res.status(500).json({ error: "Failed to start responding", details: String(err) });
   }
 });
 
@@ -2409,8 +3021,8 @@ app.post("/patrol/cases/:id/cancel", async (req, res) => {
     // First try patrol incidents store
     let incident = patrolIncidentsStore.get(caseId);
     if (incident) {
-      // Reset the incident status to pending
-      incident.status = "pending";
+      // Reset the incident status to approved (ready for another patrol)
+      incident.status = "approved";
       incident.assignedPatrol = null;
       incident.acceptedBy = null;
       incident.acceptedAt = null;
@@ -2433,14 +3045,14 @@ app.post("/patrol/cases/:id/cancel", async (req, res) => {
       return res.status(404).json({ error: "Case not found" });
     }
     
-    // Update the report: reset status to pending and clear patrol assignment
-    console.log(`[PatrolCaseCancel] Updating report with: patrol_assigned_to=null, status=pending`);
+    // Update the report: reset status to approved and clear patrol assignment
+    console.log(`[PatrolCaseCancel] Updating report with: patrol_assigned_to=null, status=approved`);
     
     const { data: updatedData, error: updateError } = await supabase
       .from("reports")
       .update({ 
         patrol_assigned_to: null,
-        status: "pending"
+        status: "approved"
       })
       .eq("id", caseId)
       .select();
@@ -2501,10 +3113,10 @@ app.get("/patrol/history", async (req, res) => {
   }
 });
 
-/** POST /patrol/history - Log a resolved case */
+/** POST /patrol/history - Submit resolution for admin verification */
 app.post("/patrol/history", async (req, res) => {
   try {
-    const { caseId, resolution, notes, category } = req.body;
+    const { caseId, resolution, notes, resolutionNotes, evidenceUrl, category } = req.body;
     const authHeader = req.headers.authorization || "";
     const token = authHeader.replace("Bearer ", "");
 
@@ -2514,7 +3126,7 @@ app.post("/patrol/history", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    console.log(`[PatrolHistoryPost] Patrol ${patrolUser.id} logging resolution for case ${caseId}...`);
+    console.log(`[PatrolHistoryPost] Patrol ${patrolUser.id} submitting resolution for case ${caseId}...`);
     
     // Get the report
     const { data: report, error: reportError } = await supabase
@@ -2530,18 +3142,26 @@ app.post("/patrol/history", async (req, res) => {
 
     // Verify report is in in_progress status
     if (report.status !== "in_progress") {
-      return res.status(400).json({ error: `Report must be in_progress before marking as resolved. Current status: ${report.status}` });
+      return res.status(400).json({ error: `Report must be in_progress before submitting resolution. Current status: ${report.status}` });
     }
 
-    // Update the report to resolved status
+    // Verify that evidence URL is provided (required for resolution)
+    if (!evidenceUrl) {
+      return res.status(400).json({ error: "Photo evidence is required to resolve a case" });
+    }
+
+    // Update the report to pending_verification status with resolution notes and evidence URL
+    // Admin must verify before status becomes "resolved"
     const now = new Date().toISOString();
+    const finalNotes = resolutionNotes || notes || null;
+    
     const { data: updatedReport, error: updateError } = await supabase
       .from("reports")
       .update({
-        status: "resolved",
+        status: "submitted",
         resolved_by: patrolUser.id,
-        resolved_at: now,
-        admin_notes: notes || null,
+        resolution_notes: finalNotes,
+        resolution_evidence_url: evidenceUrl,
       })
       .eq("id", caseId)
       .select()
@@ -2549,25 +3169,100 @@ app.post("/patrol/history", async (req, res) => {
 
     if (updateError) {
       console.error("[PatrolHistoryPost] Error updating report:", updateError);
-      return res.status(500).json({ error: "Failed to resolve report" });
+      return res.status(500).json({ error: "Failed to submit resolution" });
     }
 
-    console.log(`[PatrolHistoryPost] ✅ Case ${caseId} resolved by patrol ${patrolUser.id}`);
+    // DO NOT award points yet - points will be awarded when admin verifies the resolution
+    console.log(`[PatrolHistoryPost] ✅ Case ${caseId} submitted for verification by patrol ${patrolUser.id}`);
+    
+    // Add system log
+    await addSystemLog(caseId, "Resolution Submitted", "Patrol Officer submitted resolution with evidence for admin verification");
 
-    // Note: Points award is deferred - will be handled by database triggers or batch jobs
     res.json({
       success: true,
-      message: "Report marked as resolved",
+      message: "Resolution submitted for admin verification",
       id: caseId,
-      status: "resolved",
-      resolution,
-      notes,
+      status: "submitted",
       category,
       report: updatedReport,
     });
   } catch (err) {
     console.error("[PatrolHistoryPost] Error:", err);
     res.status(500).json({ error: "Failed to log history" });
+  }
+});
+
+/** POST /patrol-comments - Add a patrol comment visible to residents */
+app.post("/patrol-comments", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+    
+    console.log("[PatrolComments] Received comment submission, auth header present:", !!authHeader);
+
+    if (!token) {
+      console.warn("[PatrolComments] No auth token");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.warn("[PatrolComments] Auth failed:", {
+        error: authError?.message || "Unknown error",
+        hasUser: !!user,
+        errorCode: authError?.status || "unknown",
+      });
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log("[PatrolComments] Auth verified for user:", user.id);
+    
+    const { report_id, comment_text, author_role } = req.body;
+
+    if (!report_id || !comment_text || !author_role) {
+      console.warn("[PatrolComments] Missing fields");
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify report exists
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("id", report_id)
+      .single();
+
+    if (reportError || !report) {
+      console.warn("[PatrolComments] Report not found:", report_id);
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    // Insert comment
+    const { data: comment, error: insertError } = await supabase
+      .from("patrol_comments")
+      .insert({
+        report_id,
+        author_id: user.id,
+        comment_text,
+        author_role,
+        created_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+
+    if (insertError || !comment) {
+      console.error("[PatrolComments] Insert failed:", insertError);
+      return res.status(500).json({ error: "Failed to add comment" });
+    }
+
+    console.log("[PatrolComments] ✅ Comment added:", comment.id);
+    res.json({
+      success: true,
+      comment,
+    });
+  } catch (err) {
+    console.error("[PatrolComments] Error:", err);
+    res.status(500).json({ error: "Failed to add comment" });
   }
 });
 
@@ -2697,36 +3392,122 @@ app.get("/patrol/available", async (req, res) => {
   try {
     console.log("[PatrolAvailable] Fetching available reports...");
     
-    // Get reports that don't have a patrol assignment yet
+    // Get reports that have been approved by admin and don't have a patrol assignment yet
     const { data: reports, error } = await supabase
       .from("reports")
-      .select("*")
+      .select("id, title, description, status, location, category, timestamp, user_id, reporter, is_anonymous")
       .is("patrol_assigned_to", null)
-      .eq("status", "pending")
+      .eq("status", "approved")
       .limit(20);
     
     if (error) throw error;
     
-    // Map to PatrolCaseSummary format
-    const caseSummaries = (reports || []).map((r: any) => ({
-      id: r.id,
-      title: r.title || "Untitled",
-      description: r.description || "",
-      status: r.status,
-      priority: r.priority || "medium",
-      location: r.location || "Unknown",
-      category: r.category || "General",
-      timestamp: r.timestamp,
-      reporter: r.author_email || "Anonymous",
-      assignedTo: null,
-      acceptedBy: r.status === "accepted" ? r.patrol_assigned_to : null,
-    }));
+    // Enrich reports with reporter names
+    const caseSummaries = await Promise.all(
+      (reports || []).map(async (r: any) => {
+        // Get reporter name from user_profiles if user_id exists, otherwise use stored reporter name
+        let reporterName = r.reporter || "Anonymous";
+        
+        // Check if anonymous flag is set
+        if (r.is_anonymous) {
+          reporterName = "Anonymous Resident";
+        } else if (r.user_id) {
+          const { data: profile } = await supabase
+            .from("user_profiles")
+            .select("first_name, last_name")
+            .eq("auth_user_id", r.user_id)
+            .single();
+          
+          if (profile) {
+            reporterName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || r.reporter || "Anonymous";
+          }
+        }
+        
+        return {
+          id: r.id,
+          title: r.title || "Untitled",
+          description: r.description || "",
+          status: r.status,
+          priority: "medium",
+          location: r.location || "Unknown",
+          category: r.category || "General",
+          timestamp: r.timestamp,
+          reporter: reporterName,
+          assignedTo: null,
+          acceptedBy: r.status === "in_progress" ? r.patrol_assigned_to : null,
+        };
+      })
+    );
     
     console.log("[PatrolAvailable] Returning", caseSummaries.length, "available reports");
     res.json(caseSummaries);
   } catch (err) {
     console.error("[PatrolAvailable] Error:", err);
     res.status(500).json({ error: "Failed to fetch available reports" });
+  }
+});
+
+/** GET /patrol/case/:id - Fetch a specific patrol case by ID */
+app.get("/patrol/case/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[PatrolCaseDetail] Fetching case ${id}...`);
+    
+    // Get the report from Supabase
+    const { data: report, error } = await supabase
+      .from("reports")
+      .select("id, title, description, status, location, category, timestamp, patrol_assigned_to, user_id, reporter, is_anonymous")
+      .eq("id", id)
+      .single();
+    
+    if (error) {
+      console.log(`[PatrolCaseDetail] Case ${id} not found - Error:`, error.message);
+      return res.status(404).json({ error: "Case not found" });
+    }
+
+    if (!report) {
+      console.log(`[PatrolCaseDetail] Case ${id} not found`);
+      return res.status(404).json({ error: "Case not found" });
+    }
+    
+    // Get reporter name from user_profiles if user_id exists, otherwise use stored reporter name
+    let reporterName = report.reporter || "Anonymous";
+    
+    // Check if anonymous flag is set
+    if (report.is_anonymous) {
+      reporterName = "Anonymous Resident";
+    } else if (report.user_id) {
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("auth_user_id", report.user_id)
+        .single();
+      
+      if (profile) {
+        reporterName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || report.reporter || "Anonymous";
+      }
+    }
+    
+    // Map to PatrolCaseSummary format
+    const caseSummary = {
+      id: report.id,
+      title: report.title || "Untitled",
+      description: report.description || "",
+      status: report.status,
+      priority: "medium",
+      location: report.location || "Unknown",
+      category: report.category || "General",
+      timestamp: report.timestamp,
+      reporter: reporterName,
+      assignedTo: report.patrol_assigned_to,
+      acceptedBy: report.status === "in_progress" ? report.patrol_assigned_to : null,
+    };
+    
+    console.log(`[PatrolCaseDetail] Returning case ${id} with status:`, report.status);
+    res.json(caseSummary);
+  } catch (err) {
+    console.error("[PatrolCaseDetail] Error:", err);
+    res.status(500).json({ error: "Failed to fetch case" });
   }
 });
 

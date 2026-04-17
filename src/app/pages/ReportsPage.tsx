@@ -17,23 +17,26 @@ import { SkeletonCard, EmptyState, ErrorState } from "../components/ui/DataState
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-type TabKey = "all" | "approved" | "in_progress" | "accepted" | "resolved" | "rejected";
+type TabKey = "all" | "approved" | "in_progress" | "accepted" | "submitted" | "resolved" | "rejected";
 
 const tabs: { key: TabKey; label: string; color: string }[] = [
-  { key: "all",         label: "All Reports",  color: "#800000" },
+  { key: "all",         label: "All",           color: "#800000" },
   { key: "approved",    label: "Approved",      color: "#d97706" },
   { key: "in_progress", label: "In Progress",   color: "#2563eb" },
-  { key: "accepted",    label: "Accepted",      color: "#8b5cf6" },
+  { key: "accepted",    label: "Accepted",      color: "#f59e0b" },
+  { key: "submitted",   label: "Submitted",     color: "#8b5cf6" },
   { key: "resolved",    label: "Resolved",      color: "#16a34a" },
-  { key: "rejected",    label: "Rejected",      color: "#7c3aed" },
+  { key: "rejected",    label: "Rejected",      color: "#ef4444" },
 ];
 
 const statusConfig: Record<string, { bg: string; text: string; icon: React.ElementType; label: string }> = {
-  approved:    { bg: "bg-amber-100", text: "text-amber-700",  icon: Clock,        label: "Approved" },
-  in_progress: { bg: "bg-blue-100",  text: "text-blue-700",   icon: Zap,          label: "In Progress" },
-  accepted:    { bg: "bg-purple-100", text: "text-purple-700", icon: BadgeCheck,   label: "Accepted" },
+  pending_verification: { bg: "bg-amber-100", text: "text-amber-700",  icon: Clock,        label: "Pending Verification" },
+  approved:    { bg: "bg-blue-100",  text: "text-blue-700",   icon: BadgeCheck,   label: "Approved" },
+  in_progress: { bg: "bg-cyan-100",  text: "text-cyan-700",   icon: Zap,          label: "In Progress" },
+  accepted:    { bg: "bg-yellow-100", text: "text-yellow-700", icon: CheckCircle,  label: "Accepted" },
+  submitted:   { bg: "bg-purple-100", text: "text-purple-700", icon: FileText,     label: "Submitted" },
   resolved:    { bg: "bg-green-100", text: "text-green-700",  icon: CheckCircle,  label: "Resolved" },
-  rejected:    { bg: "bg-purple-100", text: "text-purple-700", icon: AlertCircle, label: "Rejected" },
+  rejected:    { bg: "bg-red-100",    text: "text-red-700",    icon: AlertCircle,  label: "Rejected" },
 };
 
 const REPORT_CATEGORIES = [
@@ -105,7 +108,7 @@ export function ReportsPage() {
 
   // Sync header search → local
   useEffect(() => {
-    if (debouncedQuery) setLocalSearch(debouncedQuery);
+    setLocalSearch(debouncedQuery);
   }, [debouncedQuery]);
 
   // ── Derived filtered list ─────────────────────────────────────────────────
@@ -122,6 +125,7 @@ export function ReportsPage() {
     approved:    (reports ?? []).filter((r) => r.status === "approved").length,
     in_progress: (reports ?? []).filter((r) => r.status === "in_progress").length,
     accepted:    (reports ?? []).filter((r) => r.status === "accepted").length,
+    submitted:   (reports ?? []).filter((r) => r.status === "submitted").length,
     resolved:    (reports ?? []).filter((r) => r.status === "resolved").length,
     rejected:    (reports ?? []).filter((r) => r.status === "rejected").length,
   };
@@ -299,7 +303,7 @@ export function ReportsPage() {
           <AnimatePresence>
             {filtered.map((report, i) => {
               const status = statusConfig[report.status];
-              const StatusIcon = status.icon;
+              const StatusIcon = status?.icon;
               const isUpvoted = upvoted.has(report.id);
 
               return (
@@ -411,8 +415,8 @@ export function ReportsPage() {
                   <div className="flex items-center gap-2 mb-4 flex-wrap">
                     {(() => {
                       const s = statusConfig[selectedReport.status];
-                      const SI = s.icon;
-                      return <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${s.bg} ${s.text}`}><SI className="w-3.5 h-3.5" />{s.label}</span>;
+                      const SI = s?.icon;
+                      return s ? <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${s.bg} ${s.text}`}><SI className="w-3.5 h-3.5" />{s.label}</span> : null;
                     })()}
                     {selectedReport.verified && (
                       <span className="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
@@ -552,15 +556,33 @@ export function ReportsPage() {
                             ) : (
                               reportComments.map((c) => (
                                 <div key={c.id} className="flex items-start gap-3">
-                                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: "#800000" }}>
+                                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${
+                                    c.author_role === "system" ? "bg-amber-500" :
+                                    c.author_role === "patrol" ? "bg-blue-600" : 
+                                    "bg-[#800000]"
+                                  }`}>
                                     {c.avatar}
                                   </div>
-                                  <div className="flex-1 bg-gray-50 rounded-xl p-3">
+                                  <div className={`flex-1 rounded-xl p-3 ${
+                                    c.author_role === "system" ? "bg-amber-50 border-2 border-amber-300" :
+                                    c.author_role === "patrol" ? "bg-blue-50 border border-blue-200" : 
+                                    "bg-gray-50"
+                                  }`}>
                                     <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-xs font-semibold text-gray-900">{c.author}</span>
+                                      <span className={`text-xs font-semibold ${
+                                        c.author_role === "system" ? "text-amber-900" : "text-gray-900"
+                                      }`}>{c.author}</span>
+                                      {c.author_role === "system" && (
+                                        <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold">System Log</span>
+                                      )}
+                                      {c.author_role === "patrol" && (
+                                        <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-xs font-bold">Patrol</span>
+                                      )}
                                       <span className="text-xs text-gray-400">{c.time}</span>
                                     </div>
-                                    <p className="text-sm text-gray-700 leading-relaxed">{c.text}</p>
+                                    <p className={`text-sm leading-relaxed ${
+                                      c.author_role === "system" ? "text-amber-800 font-medium" : "text-gray-700"
+                                    }`}>{c.text}</p>
                                   </div>
                                 </div>
                               ))

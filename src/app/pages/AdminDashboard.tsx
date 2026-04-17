@@ -15,6 +15,7 @@ import {
   fetchAdminStats,
   fetchReports,
   fetchPendingReports,
+  fetchSubmittedReports,
   fetchBarangayData,
   fetchMonthlyTrends,
   fetchCategoryData,
@@ -27,6 +28,9 @@ import {
   rejectUser,
   approveReport,
   rejectReport,
+  toggleAnonymousReport,
+  approvePatrolResolution,
+  rejectPatrolResolution,
   type Report,
 } from "../services/api";
 import {
@@ -57,10 +61,12 @@ const adminTabs: { key: AdminTab; label: string; icon: LucideIcon }[] = [
   { key: "patrol",        label: "Patrol Monitoring",  icon: Radio },
 ];
 
-const statusColors: Record<string, { bg: string; text: string; label: string }> = {
-  pending:     { bg: "bg-amber-100", text: "text-amber-700", label: "Pending" },
-  accepted:    { bg: "bg-blue-100",  text: "text-blue-700",  label: "Accepted" },
+  const statusColors: Record<string, { bg: string; text: string; label: string }> = {
+  pending_verification: { bg: "bg-amber-100", text: "text-amber-700", label: "Pending Verification" },
+  approved:    { bg: "bg-blue-100",  text: "text-blue-700",  label: "Approved" },
   in_progress: { bg: "bg-cyan-100",  text: "text-cyan-700",  label: "In Progress" },
+  accepted:    { bg: "bg-yellow-100", text: "text-yellow-700", label: "Accepted" },
+  submitted:   { bg: "bg-purple-100", text: "text-purple-700", label: "Submitted" },
   resolved:    { bg: "bg-green-100", text: "text-green-700", label: "Resolved" },
 };
 
@@ -79,13 +85,17 @@ export function AdminDashboard() {
   const [reportDetailOpen, setReportDetailOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
-  const [reportsSubTab, setReportsSubTab] = useState<"all" | "pending-verification">("all");
+  const [reportsSubTab, setReportsSubTab] = useState<"all" | "pending-verification" | "submitted">("all");
   const [processingReportId, setProcessingReportId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [pendingRejectReportId, setPendingRejectReportId] = useState<string | null>(null);
   const [pendingReportDetailOpen, setPendingReportDetailOpen] = useState(false);
   const [selectedPendingReport, setSelectedPendingReport] = useState<any>(null);
+  const [submittedReportDetailOpen, setSubmittedReportDetailOpen] = useState(false);
+  const [selectedSubmittedReport, setSelectedSubmittedReport] = useState<any>(null);
+  const [submittedResolutionNotes, setSubmittedResolutionNotes] = useState("");
+  const [processingSubmittedId, setProcessingSubmittedId] = useState<string | null>(null);
   
   // Patrol promotion modal state
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
@@ -100,6 +110,9 @@ export function AdminDashboard() {
     userName?: string;
   } | null>(null);
 
+  const [togglingAnonymityReportId, setTogglingAnonymityReportId] = useState<string | null>(null);
+  const [optimisticAnonymousToggles, setOptimisticAnonymousToggles] = useState<Record<string, boolean>>({});
+
   const activeTab = (searchParams.get("tab") ?? "overview") as AdminTab;
   const setTab = (tab: AdminTab) => {
     if (tab === "chat") { navigate("/app/admin/chat"); return; }
@@ -110,6 +123,7 @@ export function AdminDashboard() {
   const { data: stats, loading: statsLoading, error: statsError, refetch: retryStats } = useApi(fetchAdminStats);
   const { data: reports, loading: reportsLoading, error: reportsError, refetch: refetchReports } = useApi(fetchReports);
   const { data: pendingReports, loading: pendingReportsLoading, error: pendingReportsError, refetch: refetchPendingReports } = useApi(fetchPendingReports);
+  const { data: submittedReports, loading: submittedReportsLoading, error: submittedReportsError, refetch: refetchSubmittedReports } = useApi(fetchSubmittedReports);
   const { data: barangayData, loading: chartsLoading } = useApi(fetchBarangayData);
   const { data: monthlyData } = useApi(fetchMonthlyTrends);
   const { data: categoryData } = useApi(fetchCategoryData);
@@ -254,6 +268,95 @@ export function AdminDashboard() {
       setShowRejectModal(false);
       setRejectionReason("");
       setPendingRejectReportId(null);
+    }
+  };
+
+  const handleToggleAnonymous = async (reportId: string) => {
+    setTogglingAnonymityReportId(reportId);
+    
+    // Get current state (from optimistic toggle or actual data)
+    const currentReport = pendingReports?.find(r => r.id === reportId);
+    const currentAnonymousState = optimisticAnonymousToggles[reportId] !== undefined 
+      ? optimisticAnonymousToggles[reportId]
+      : currentReport?.is_anonymous ?? false;
+    
+    // Optimistically toggle the state
+    const newAnonymousState = !currentAnonymousState;
+    setOptimisticAnonymousToggles(prev => ({
+      ...prev,
+      [reportId]: newAnonymousState
+    }));
+    
+    try {
+      const result = await toggleAnonymousReport(reportId);
+      if (result.data?.success) {
+        const status = result.data.isAnonymous ? "anonymous" : "public";
+        showToast(`✓ Report marked as ${status}`, "success");
+        // Clear optimistic state and refetch
+        setOptimisticAnonymousToggles(prev => {
+          const copy = { ...prev };
+          delete copy[reportId];
+          return copy;
+        });
+        await refetchPendingReports();
+        await refetchReports();
+        await retryStats();
+      } else {
+        // Revert optimistic update on error
+        setOptimisticAnonymousToggles(prev => {
+          const copy = { ...prev };
+          delete copy[reportId];
+          return copy;
+        });
+        showToast(`Failed to toggle anonymous status: ${result.error}`, "error");
+      }
+    } catch (err) {
+      // Revert optimistic update on error
+      setOptimisticAnonymousToggles(prev => {
+        const copy = { ...prev };
+        delete copy[reportId];
+        return copy;
+      });
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to toggle anonymous status"}`, "error");
+    } finally {
+      setTogglingAnonymityReportId(null);
+    }
+  };
+
+  const handleApproveSubmittedResolution = async (reportId: string) => {
+    setProcessingSubmittedId(reportId);
+    try {
+      const result = await approvePatrolResolution(reportId, submittedResolutionNotes);
+      if (result.data?.success) {
+        showToast(`Resolution approved! Patrol officer earned 25 points ✨`, "success");
+        await refetchSubmittedReports();
+        await retryStats();
+        setSubmittedResolutionNotes("");
+      } else {
+        showToast(`Failed to approve resolution: ${result.error}`, "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to approve resolution"}`, "error");
+    } finally {
+      setProcessingSubmittedId(null);
+    }
+  };
+
+  const handleRejectSubmittedResolution = async (reportId: string) => {
+    setProcessingSubmittedId(reportId);
+    try {
+      const result = await rejectPatrolResolution(reportId, submittedResolutionNotes);
+      if (result.data?.success) {
+        showToast(`Resolution sent back to patrol for revision`, "warning");
+        await refetchSubmittedReports();
+        setSubmittedResolutionNotes("");
+      } else {
+        showToast(`Failed to reject resolution: ${result.error}`, "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to reject resolution"}`, "error");
+    } finally {
+      setProcessingSubmittedId(null);
     }
   };
 
@@ -492,6 +595,21 @@ export function AdminDashboard() {
                 </span>
               ) : null}
             </button>
+            <button
+              onClick={() => setReportsSubTab("submitted")}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                reportsSubTab === "submitted"
+                  ? "bg-[#800000] text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Patrol Resolutions
+              {submittedReports?.length ? (
+                <span className="bg-purple-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                  {submittedReports.length}
+                </span>
+              ) : null}
+            </button>
           </div>
 
           {/* All Reports View */}
@@ -562,7 +680,7 @@ export function AdminDashboard() {
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="relative">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`} onClick={() => setStatusMenuId(r.id)}>{s.label}</span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${s?.bg} ${s?.text}`} onClick={() => setStatusMenuId(r.id)}>{s?.label || r.status}</span>
                             {statusMenuId === r.id && (
                               <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-md z-10">
                                 <button
@@ -756,10 +874,10 @@ export function AdminDashboard() {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
-                            {r.avatar}
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: r.is_anonymous ? "#999" : "#800000" }}>
+                            {r.is_anonymous ? "AN" : r.avatar}
                           </div>
-                          <span className="text-gray-700 text-sm">{r.reporter}</span>
+                          <span className="text-gray-700 text-sm">{r.is_anonymous ? "Anonymous Resident" : r.reporter}</span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-gray-700 text-sm max-w-xs truncate">{r.location}</td>
@@ -768,7 +886,10 @@ export function AdminDashboard() {
                       </td>
                       <td className="px-5 py-3.5 flex gap-2">
                         <button
-                          onClick={() => handleApprovePendingReport(r.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApprovePendingReport(r.id);
+                          }}
                           disabled={processingReportId === r.id}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                             processingReportId === r.id
@@ -780,7 +901,10 @@ export function AdminDashboard() {
                           ✓ Approve
                         </button>
                         <button
-                          onClick={() => handleRejectPendingReport(r.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRejectPendingReport(r.id);
+                          }}
                           disabled={processingReportId === r.id}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                             processingReportId === r.id
@@ -788,6 +912,134 @@ export function AdminDashboard() {
                               : "bg-red-100 text-red-700 hover:bg-red-200"
                           }`}
                           title="Reject this report"
+                        >
+                          ✗ Reject
+                        </button>
+                        <label 
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={optimisticAnonymousToggles[r.id] !== undefined ? optimisticAnonymousToggles[r.id] : (r.is_anonymous ?? false)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleToggleAnonymous(r.id);
+                            }}
+                            disabled={togglingAnonymityReportId === r.id}
+                            className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                            title="Mark as anonymous"
+                          />
+                          <span className="text-gray-700">Anonymous</span>
+                        </label>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+          )}
+
+          {/* Patrol Resolutions View */}
+          {reportsSubTab === "submitted" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          {!submittedReportsLoading && submittedReports && submittedReports.length > 0 && (
+            <div className="bg-purple-50 border-b border-purple-200 px-5 py-3 flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-purple-600 shrink-0" />
+              <p className="text-purple-700 text-sm">
+                <strong>{submittedReports.length} resolutions</strong> submitted by patrol officers awaiting your verification and approval.
+              </p>
+            </div>
+          )}
+          {submittedReportsLoading ? (
+            <SkeletonList rows={4} />
+          ) : submittedReportsError ? (
+            <ErrorState message={submittedReportsError} compact />
+          ) : !submittedReports || submittedReports.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle}
+              title="All caught up!"
+              description="No patrol resolutions pending verification. All submitted resolutions have been reviewed."
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {["Report ID", "Title", "Patrol Officer", "Evidence", "Submitted", "Actions"].map((h) => (
+                      <th key={h} className="px-5 py-3 text-left text-gray-400 font-medium" style={{ fontSize: "12px" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {submittedReports.map((r, i) => (
+                    <motion.tr
+                      key={r.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: i * 0.03 }}
+                      onClick={() => {
+                        setSelectedSubmittedReport(r);
+                        setSubmittedReportDetailOpen(true);
+                      }}
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <td className="px-5 py-3.5 text-gray-500 text-sm font-mono">{r.id}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="font-medium text-gray-900 text-sm max-w-xs truncate">{r.title}</div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="text-gray-700 text-sm">{r.resolved_by || "Unknown"}</div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {r.resolution_evidence_url ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedImageUrl(r.resolution_evidence_url);
+                              setImageViewerOpen(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-700 text-xs font-medium"
+                          >
+                            📷 View Photo
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">No photo</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-gray-500 text-sm">
+                        {new Date(r.timestamp).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
+                      </td>
+                      <td className="px-5 py-3.5 flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApproveSubmittedResolution(r.id);
+                          }}
+                          disabled={processingSubmittedId === r.id}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            processingSubmittedId === r.id
+                              ? "opacity-50 cursor-not-allowed"
+                              : "bg-green-100 text-green-700 hover:bg-green-200"
+                          }`}
+                          title="Approve this resolution"
+                        >
+                          ✓ Approve
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRejectSubmittedResolution(r.id);
+                          }}
+                          disabled={processingSubmittedId === r.id}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            processingSubmittedId === r.id
+                              ? "opacity-50 cursor-not-allowed"
+                              : "bg-red-100 text-red-700 hover:bg-red-200"
+                          }`}
+                          title="Reject this resolution"
                         >
                           ✗ Reject
                         </button>
@@ -900,12 +1152,13 @@ export function AdminDashboard() {
               <div className="bg-gray-50 rounded-xl p-4">
                 <p className="text-gray-400 text-sm mb-2">Reported by</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
-                    {selectedPendingReport.avatar || "A"}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: selectedPendingReport.is_anonymous ? "#999" : "#800000" }}>
+                    {selectedPendingReport.is_anonymous ? "AN" : (selectedPendingReport.avatar || "A")}
                   </div>
                   <div>
-                    <p className="text-gray-900 font-medium text-sm">{selectedPendingReport.reporter}</p>
-                    {selectedPendingReport.user_id && <p className="text-gray-400 text-xs">{selectedPendingReport.user_id}</p>}
+                    <p className="text-gray-900 font-medium text-sm">{selectedPendingReport.is_anonymous ? "Anonymous Resident" : selectedPendingReport.reporter}</p>
+                    {selectedPendingReport.is_anonymous && <p className="text-gray-400 text-xs">Anonymous Report</p>}
+                    {!selectedPendingReport.is_anonymous && selectedPendingReport.user_id && <p className="text-gray-400 text-xs">{selectedPendingReport.user_id}</p>}
                   </div>
                 </div>
               </div>
@@ -966,6 +1219,147 @@ export function AdminDashboard() {
                   }`}
                 >
                   ✗ Reject Report
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Submitted Patrol Resolution Detail Modal */}
+      {submittedReportDetailOpen && selectedSubmittedReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900 text-lg">{selectedSubmittedReport.title}</h2>
+              <button
+                onClick={() => {
+                  setSubmittedReportDetailOpen(false);
+                  setSelectedSubmittedReport(null);
+                }}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-4 space-y-4">
+              {/* Report ID & Meta */}
+              <div className="flex flex-wrap gap-4 text-sm">
+                <div>
+                  <span className="text-gray-400">Report ID:</span>
+                  <p className="font-mono text-gray-700">{selectedSubmittedReport.id}</p>
+                </div>
+                <div>
+                  <span className="text-gray-400">Status:</span>
+                  <p className="text-blue-700 font-medium">📤 Submitted</p>
+                </div>
+                <div>
+                  <span className="text-gray-400">Submitted:</span>
+                  <p className="text-gray-700">{new Date(selectedSubmittedReport.timestamp).toLocaleString("en-PH", { dateStyle: "long", timeStyle: "short" })}</p>
+                </div>
+              </div>
+
+              {/* Category & Location */}
+              <div className="flex gap-4">
+                <div>
+                  <span className="text-gray-400 text-sm">Category</span>
+                  <p className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg inline-block text-sm font-medium mt-1">{selectedSubmittedReport.category}</p>
+                </div>
+                <div className="flex-1">
+                  <span className="text-gray-400 text-sm flex items-center gap-1">
+                    <MapPin className="w-4 h-4" /> Location
+                  </span>
+                  <p className="text-gray-700 mt-1">{selectedSubmittedReport.location}</p>
+                </div>
+              </div>
+
+              {/* Patrol Officer Info */}
+              <div className="bg-blue-50 rounded-xl p-4">
+                <p className="text-gray-400 text-sm mb-2">Resolution Submitted by</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
+                    {selectedSubmittedReport.resolved_by?.substring(0, 2).toUpperCase() || "P"}
+                  </div>
+                  <div>
+                    <p className="text-gray-900 font-medium text-sm">{selectedSubmittedReport.resolved_by || "Unknown Patrol Officer"}</p>
+                    <p className="text-gray-400 text-xs">Patrol Officer</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <p className="text-gray-400 text-sm mb-2">Incident Description</p>
+                <div className="bg-gray-50 rounded-lg p-4 text-gray-700 text-sm leading-relaxed">
+                  {selectedSubmittedReport.description || "No description provided"}
+                </div>
+              </div>
+
+              {/* Resolution Notes */}
+              {selectedSubmittedReport.resolution_notes && (
+                <div>
+                  <p className="text-gray-400 text-sm mb-2">Patrol Officer's Resolution Notes</p>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-gray-700 text-sm leading-relaxed">
+                    {selectedSubmittedReport.resolution_notes}
+                  </div>
+                </div>
+              )}
+
+              {/* Evidence Photo */}
+              {selectedSubmittedReport.resolution_evidence_url && (
+                <div>
+                  <p className="text-gray-400 text-sm mb-2">Evidence Photo</p>
+                  <div className="bg-gray-100 rounded-lg overflow-hidden">
+                    <img 
+                      src={selectedSubmittedReport.resolution_evidence_url} 
+                      alt="Evidence" 
+                      className="w-full max-h-96 object-cover cursor-pointer hover:opacity-90"
+                      onClick={() => {
+                        setSelectedImageUrl(selectedSubmittedReport.resolution_evidence_url);
+                        setImageViewerOpen(true);
+                      }}
+                      title="Click to view full size"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    handleApproveSubmittedResolution(selectedSubmittedReport.id);
+                    setSubmittedReportDetailOpen(false);
+                  }}
+                  disabled={processingSubmittedId === selectedSubmittedReport.id}
+                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                    processingSubmittedId === selectedSubmittedReport.id
+                      ? "opacity-50 cursor-not-allowed"
+                      : "bg-green-100 text-green-700 hover:bg-green-200"
+                  }`}
+                >
+                  {processingSubmittedId === selectedSubmittedReport.id ? "Approving..." : "✓ Approve Resolution"}
+                </button>
+                <button
+                  onClick={() => {
+                    handleRejectSubmittedResolution(selectedSubmittedReport.id);
+                    setSubmittedReportDetailOpen(false);
+                  }}
+                  disabled={processingSubmittedId === selectedSubmittedReport.id}
+                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                    processingSubmittedId === selectedSubmittedReport.id
+                      ? "opacity-50 cursor-not-allowed"
+                      : "bg-red-100 text-red-700 hover:bg-red-200"
+                  }`}
+                >
+                  {processingSubmittedId === selectedSubmittedReport.id ? "Rejecting..." : "✗ Reject Resolution"}
                 </button>
               </div>
             </div>
@@ -1141,12 +1535,6 @@ export function AdminDashboard() {
                   <span className="inline-block px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-lg">{selectedReport.category}</span>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-medium mb-1">Priority</p>
-                  <span className={`inline-block px-3 py-1 text-sm rounded-lg font-medium ${selectedReport.priority === "high" ? "bg-red-100 text-red-700" : selectedReport.priority === "medium" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
-                    {selectedReport.priority.charAt(0).toUpperCase() + selectedReport.priority.slice(1)}
-                  </span>
-                </div>
-                <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">Date Reported</p>
                   <p className="text-sm font-medium text-gray-900">
                     {new Date(selectedReport.timestamp).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
@@ -1180,6 +1568,16 @@ export function AdminDashboard() {
                     alt="Report"
                     className="w-full rounded-lg max-h-64 object-cover border border-gray-200"
                   />
+                </div>
+              )}
+
+              {/* Admin Notes from Reporter */}
+              {selectedReport.admin_notes && (
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-2">Private Notes for Admin</p>
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedReport.admin_notes}</p>
+                  </div>
                 </div>
               )}
 

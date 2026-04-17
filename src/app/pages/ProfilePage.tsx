@@ -228,35 +228,57 @@ export function ProfilePage() {
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                 <h3 className="font-semibold text-gray-900 mb-3">Civic Score</h3>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-500 text-sm">Progress to next tier</span>
-                  <span className="font-bold text-sm" style={{ color: "#800000" }}>1,120 pts</span>
+                  <span className="text-gray-500 text-sm">Total Points</span>
+                  <span className="font-bold text-lg" style={{ color: "#800000" }}>{displayUser.points.toLocaleString()}</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full mb-2 overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: "75%", backgroundColor: "#d97706" }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: Math.min((displayUser.points / 5000) * 100, 100) + "%", backgroundColor: "#d97706" }} />
                 </div>
-                <p className="text-gray-400 text-xs">380 more points until Diamond tier</p>
+                <p className="text-gray-400 text-xs">{Math.max(5000 - displayUser.points, 0).toLocaleString()} more points until Diamond tier</p>
               </div>
 
               {/* Recent Activity */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                 <h3 className="font-semibold text-gray-900 mb-3">Recent Activity</h3>
                 <div className="space-y-3">
-                  {[
-                    { action: "Filed report RPT-001", time: "2h ago", icon: FileText, color: "#800000" },
-                    { action: "Earned +50 points", time: "3h ago", icon: Star, color: "#d97706" },
-                    { action: "Report RPT-003 resolved", time: "Yesterday", icon: CheckCircle, color: "#16a34a" },
-                    { action: "Ranked #2 this month", time: "3 days ago", icon: Trophy, color: "#6b7280" },
-                  ].map((a, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: `${a.color}15` }}>
-                        <a.icon className="w-3.5 h-3.5" style={{ color: a.color }} />
+                  {displayUser.points > 0 && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#80000015" }}>
+                        <FileText className="w-3.5 h-3.5" style={{ color: "#800000" }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-gray-700 text-sm truncate">{a.action}</p>
+                        <p className="text-gray-700 text-sm truncate">{displayUser.reports} report(s) filed</p>
                       </div>
-                      <span className="text-gray-400 text-xs shrink-0">{a.time}</span>
+                      <span className="text-gray-400 text-xs shrink-0">active</span>
                     </div>
-                  ))}
+                  )}
+                  {displayUser.points > 0 && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#d9770615" }}>
+                        <Star className="w-3.5 h-3.5" style={{ color: "#d97706" }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-700 text-sm truncate">Earned {displayUser.points} points</p>
+                      </div>
+                      <span className="text-gray-400 text-xs shrink-0">recently</span>
+                    </div>
+                  )}
+                  {displayUser.verified && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#16a34a15" }}>
+                        <CheckCircle className="w-3.5 h-3.5" style={{ color: "#16a34a" }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-700 text-sm truncate">Verified member</p>
+                      </div>
+                      <span className="text-gray-400 text-xs shrink-0">✓</span>
+                    </div>
+                  )}
+                  {!displayUser.points && !displayUser.reports && (
+                    <div className="text-center py-4">
+                      <p className="text-gray-400 text-sm">No activity yet. File your first report to get started! 🎯</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

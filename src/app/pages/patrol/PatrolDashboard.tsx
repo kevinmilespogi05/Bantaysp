@@ -1,17 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   AlertTriangle, MapPin, Clock, User, CheckCircle, XCircle,
   Navigation, Zap, Shield, Activity, TrendingUp, Star,
   ChevronRight, Camera, FileText, Phone, Radio, Target,
-  ClipboardList, ArrowRight, LogOut,
+  ClipboardList, ArrowRight, LogOut, Loader, Image as ImageIcon, X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { useApi, fetchActiveCase, fetchAssignedReports, fetchPatrolStats, fetchPatrolHistory, cancelPatrolCase } from "../../services/api";
+import { useApi, fetchActiveCase, fetchAssignedReports, fetchPatrolStats, fetchPatrolHistory, cancelPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary } from "../../services/api";
 import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataStates";
 
-type CaseStatus = "assigned" | "accepted" | "in_progress" | "resolving" | "resolved";
+type CaseStatus = "assigned" | "accepted" | "in_progress" | "submitted" | "resolving" | "resolved";
 
 const priorityConfig = {
   critical: { bg: "#7f1d1d", border: "#ef4444", badge: "bg-red-500", text: "CRITICAL", glow: "0 0 30px rgba(239,68,68,0.3)" },
@@ -39,17 +39,29 @@ function timeAgo(dateStr: string) {
 
 export function PatrolDashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  
   const [caseStatus, setCaseStatus] = useState<CaseStatus>("accepted");
   const [showResolution, setShowResolution] = useState(false);
   const [resNotes, setResNotes] = useState("");
-  const [photoUploaded, setPhotoUploaded] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
   const [showDeclineConfirm, setShowDeclineConfirm] = useState(false);
   const [declined, setDeclined] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [inProgressLoading, setInProgressLoading] = useState(false);
+  const [resolutionLoading, setResolutionLoading] = useState(false);
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
 
   // ── Data from API service ─────────────────────────────────────────────────
-  const { data: activeCase, loading: caseLoading } = useApi(() => fetchActiveCase(user.id));
+  const { data: activeCase, loading: caseLoading, refetch: refetchActiveCase } = useApi(() => fetchActiveCase(user.id));
   const { data: assignedReports, loading: assignedLoading } = useApi(fetchAssignedReports);
   const { data: patrolStats, loading: statsLoading } = useApi(fetchPatrolStats);
   const { data: patrolHistory, loading: historyLoading } = useApi(fetchPatrolHistory);
@@ -58,15 +70,203 @@ export function PatrolDashboard() {
     ? priorityConfig[activeCase.priority as keyof typeof priorityConfig] ?? priorityConfig.medium
     : priorityConfig.medium;
 
+  // Attach stream to video element when camera becomes active
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      console.log("[PatrolDashboard] Attaching stream to video element");
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [cameraActive]);
+
+  // Sync caseStatus with activeCase.status from database
+  useEffect(() => {
+    if (activeCase?.status) {
+      setCaseStatus(activeCase.status as CaseStatus);
+    }
+  }, [activeCase?.status]);
+
   const handleAccept = () => setCaseStatus("accepted");
   const handleDecline = () => { setShowDeclineConfirm(true); };
   const confirmDecline = () => { setDeclined(true); setShowDeclineConfirm(false); };
-  const handleInProgress = () => setCaseStatus("in_progress");
+  
+  const handleInProgress = async () => {
+    if (!activeCase) return;
+    setInProgressLoading(true);
+    try {
+      const response = await startPatrolResponse(activeCase.id);
+      if (response.error) {
+        console.error("[PatrolDashboard] Failed to mark as in_progress:", response.error);
+        return;
+      }
+      console.log("[PatrolDashboard] ✅ Case marked as in_progress, refetching...");
+      // Refetch active case to sync with database
+      setTimeout(() => refetchActiveCase(), 100);
+    } catch (err) {
+      console.error("[PatrolDashboard] Error:", err);
+    } finally {
+      setInProgressLoading(false);
+    }
+  };
+  
   const handleResolve = () => setShowResolution(true);
-  const submitResolution = () => {
-    if (!photoUploaded) return;
-    setShowResolution(false);
-    setCaseStatus("resolved");
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setResolutionError("Please select an image file");
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setResolutionError("File size must be less than 10MB");
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPhotoPreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    setPhotoFile(file);
+    setShowCamera(false);
+  };
+
+  const startCamera = async () => {
+    try {
+      console.log("[PatrolDashboard] Starting camera...");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      streamRef.current = stream;
+      setCameraActive(true);
+      console.log("[PatrolDashboard] Stream stored, camera active set");
+    } catch (err) {
+      console.error("[PatrolDashboard] Camera error:", err);
+      setResolutionError("Unable to access camera. Please check permissions.");
+    }
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const context = canvasRef.current.getContext("2d");
+      if (context) {
+        canvasRef.current.width = videoRef.current.videoWidth;
+        canvasRef.current.height = videoRef.current.videoHeight;
+        context.drawImage(videoRef.current, 0, 0);
+        
+        canvasRef.current.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], `patrol_evidence_${Date.now()}.jpg`, { type: "image/jpeg" });
+            setPhotoFile(file);
+            setPhotoPreview(canvasRef.current!.toDataURL("image/jpeg"));
+            stopCamera();
+          }
+        }, "image/jpeg", 0.95);
+      }
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+    setShowCamera(false);
+  };
+
+  const removePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  };
+
+  const submitResolution = async () => {
+    if (!photoFile || !activeCase) return;
+    
+    setResolutionLoading(true);
+    setUploadingPhoto(true);
+    setResolutionError(null);
+    
+    try {
+      // Upload photo to Cloudinary
+      console.log("[PatrolDashboard] Uploading photo to Cloudinary...");
+      const uploadResult = await uploadToCloudinary(photoFile);
+      
+      if (uploadResult.error || !uploadResult.data?.url) {
+        setResolutionError("Failed to upload photo: " + uploadResult.error);
+        console.error("[PatrolDashboard] Upload failed:", uploadResult.error);
+        setResolutionLoading(false);
+        setUploadingPhoto(false);
+        return;
+      }
+      
+      const evidenceUrl = uploadResult.data.url;
+      console.log("[PatrolDashboard] Photo uploaded to Cloudinary:", evidenceUrl);
+      
+      setUploadingPhoto(false);
+      
+      // Call API to resolve the case with evidence URL and notes
+      const response = await resolvePatrolCase(activeCase.id, resNotes, evidenceUrl, activeCase.category);
+      
+      if (response.error) {
+        setResolutionError(response.error);
+        console.error("[PatrolDashboard] Resolution failed:", response.error);
+        setResolutionLoading(false);
+        return;
+      }
+      
+      console.log("[PatrolDashboard] ✅ Case resolved successfully");
+      
+      // Post resolution notes as patrol comment visible to residents
+      if (resNotes.trim() && session?.access_token) {
+        try {
+          const commentResponse = await fetch("http://localhost:3000/patrol-comments", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              report_id: activeCase.id,
+              comment_text: resNotes,
+              author_role: "patrol",
+            }),
+          });
+          
+          if (!commentResponse.ok) {
+            console.warn("[PatrolDashboard] Failed to post comment, but resolution was successful");
+          } else {
+            console.log("[PatrolDashboard] ✅ Patrol comment posted");
+          }
+        } catch (err) {
+          console.warn("[PatrolDashboard] Comment error:", err);
+        }
+      }
+      
+      setShowResolution(false);
+      setCaseStatus("submitted");
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setResNotes("");
+      
+      // Refetch active case to sync with database
+      setTimeout(() => refetchActiveCase(), 100);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to resolve case";
+      setResolutionError(errorMsg);
+      console.error("[PatrolDashboard] Resolution error:", err);
+    } finally {
+      setResolutionLoading(false);
+      setUploadingPhoto(false);
+    }
   };
 
   const stats = patrolStats ? [
@@ -141,7 +341,7 @@ export function PatrolDashboard() {
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
           >
-            {caseStatus !== "resolved" ? (
+            {caseStatus !== "resolved" && caseStatus !== "submitted" ? (
               <div
                 className="rounded-2xl border-2 overflow-hidden relative"
                 style={{
@@ -163,6 +363,13 @@ export function PatrolDashboard() {
                     <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70">
                       {activeCase?.category}
                     </span>
+                    <button
+                      onClick={() => navigate(`/app/patrol/case/${activeCase?.id}`)}
+                      className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-all"
+                      title="View full case details"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" /> Details
+                    </button>
                   </div>
                 </div>
 
@@ -213,22 +420,23 @@ export function PatrolDashboard() {
                   </div>
 
                   {/* Status Flow */}
-                  <div className="flex items-center gap-2 mb-4">
-                    {(["assigned", "accepted", "in_progress", "resolved"] as const).map((s, i) => (
-                      <div key={s} className="flex items-center gap-2">
-                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
+                  <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
+                    {(["assigned", "accepted", "in_progress", "submitted", "resolved"] as const).map((s, i) => (
+                      <div key={s} className="flex items-center gap-2 shrink-0">
+                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs whitespace-nowrap ${
                           caseStatus === s
                             ? "bg-white text-gray-900 font-semibold"
-                            : ["assigned", "accepted", "in_progress"].indexOf(s) < ["assigned", "accepted", "in_progress"].indexOf(caseStatus)
+                            : ["assigned", "accepted", "in_progress", "submitted"].indexOf(s) < ["assigned", "accepted", "in_progress", "submitted"].indexOf(caseStatus)
                               ? "bg-green-500/20 text-green-300"
                               : "bg-white/10 text-white/30"
                         }`}>
                           {s === "assigned" && "📋 Assigned"}
                           {s === "accepted" && "✅ Accepted"}
                           {s === "in_progress" && "🚨 Responding"}
+                          {s === "submitted" && "📤 Submitted"}
                           {s === "resolved" && "✔️ Resolved"}
                         </div>
-                        {i < 3 && <ChevronRight className="w-3 h-3 text-white/20 shrink-0" />}
+                        {i < 4 && <ChevronRight className="w-3 h-3 text-white/20 shrink-0" />}
                       </div>
                     ))}
                   </div>
@@ -267,9 +475,18 @@ export function PatrolDashboard() {
                         </button>
                         <button
                           onClick={handleInProgress}
-                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium transition-all"
+                          disabled={inProgressLoading}
+                          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium transition-all disabled:opacity-70"
                         >
-                          <Zap className="w-4 h-4" /> Mark In Progress
+                          {inProgressLoading ? (
+                            <>
+                              <Loader className="w-4 h-4 animate-spin" /> Starting...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-4 h-4" /> Mark In Progress
+                            </>
+                          )}
                         </button>
                         <button
                           onClick={async () => {
@@ -332,6 +549,40 @@ export function PatrolDashboard() {
                   </div>
                 </div>
               </div>
+            ) : caseStatus === "submitted" ? (
+              /* Resolution Submitted State */
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="rounded-2xl border-2 border-blue-500/30 p-6"
+                style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(59, 130, 246, 0.2)" }}>
+                    <Clock className="w-8 h-8 text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-blue-200 text-lg font-bold mb-1">Awaiting Admin Review</h3>
+                    <p className="text-blue-300/70 text-sm">
+                      Your resolution for {activeCase?.id} has been submitted. An admin is reviewing the evidence and notes. You'll be notified once verified.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={() => navigate("/app/patrol/assigned")}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 text-sm font-medium transition-colors"
+                  >
+                    View Queue
+                  </button>
+                  <button
+                    onClick={() => navigate("/app/patrol/history")}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-blue-500/30 text-blue-300 text-sm font-medium hover:bg-blue-500/10 transition-colors"
+                  >
+                    View History
+                  </button>
+                </div>
+              </motion.div>
             ) : (
               /* Resolved State */
               <motion.div
@@ -345,7 +596,7 @@ export function PatrolDashboard() {
                 </div>
                 <h3 className="text-green-300 text-lg font-bold mb-1">Case Resolved! 🎉</h3>
                 <p className="text-green-500/70 text-sm mb-4">
-                  {activeCase?.id} has been marked as resolved and submitted for review.
+                  {activeCase?.id} has been verified and marked as resolved.
                 </p>
                 <div className="flex gap-3 justify-center">
                   <button
@@ -526,15 +777,18 @@ export function PatrolDashboard() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 z-40"
-              onClick={() => setShowResolution(false)}
+              className="fixed inset-0 bg-black/70 z-40 min-h-screen"
+              onClick={() => {
+                stopCamera();
+                setShowResolution(false);
+              }}
             />
             <motion.div
               initial={{ opacity: 0, y: 80 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 80 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 md:left-auto md:right-auto md:top-1/2 md:-translate-y-1/2 md:w-[480px] md:mx-auto z-50 rounded-t-3xl md:rounded-2xl border border-slate-700 shadow-2xl"
+              className="fixed bottom-0 left-0 right-0 md:left-auto md:right-auto md:top-1/2 md:-translate-y-1/2 md:w-[480px] md:mx-auto z-50 rounded-t-3xl md:rounded-2xl border border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto"
               style={{ backgroundColor: "#161b22" }}
             >
               <div className="p-5">
@@ -544,34 +798,99 @@ export function PatrolDashboard() {
                   </div>
                   <div>
                     <h3 className="text-white font-bold">Mark as Resolved</h3>
-                    <p className="text-slate-400 text-xs">Provide evidence to close this case</p>
+                    <p className="text-slate-400 text-xs">Upload evidence to close this case</p>
                   </div>
                 </div>
 
-                {/* Photo Upload */}
+                {/* Photo Evidence Section */}
                 <div className="mb-4">
                   <label className="text-slate-300 text-sm font-medium mb-2 block">
                     📷 Photo Evidence <span className="text-red-400">*required</span>
                   </label>
-                  {!photoUploaded ? (
-                    <button
-                      onClick={() => setPhotoUploaded(true)}
-                      className="w-full border-2 border-dashed border-slate-600 rounded-2xl p-6 flex flex-col items-center gap-2 hover:border-slate-400 transition-colors"
-                    >
-                      <Camera className="w-8 h-8 text-slate-500" />
-                      <span className="text-slate-400 text-sm">Tap to take photo or upload</span>
-                      <span className="text-slate-600 text-xs">Camera-first · JPG, PNG supported</span>
-                    </button>
-                  ) : (
-                    <div className="w-full rounded-2xl border-2 border-green-500/50 p-4 flex items-center gap-3 bg-green-500/10">
-                      <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
-                      <div>
-                        <div className="text-green-300 text-sm font-medium">Photo captured</div>
-                        <div className="text-green-500/60 text-xs">scene_evidence_07.jpg</div>
+
+                  {/* Camera Preview */}
+                  {cameraActive && (
+                    <div className="rounded-2xl border-2 border-slate-600 mb-3 overflow-hidden bg-black">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-64 object-cover"
+                      />
+                      <div className="flex gap-2 p-3">
+                        <button
+                          onClick={capturePhoto}
+                          className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500 hover:bg-green-400 text-white text-sm font-medium transition-colors"
+                        >
+                          <CheckCircle className="w-4 h-4" /> Capture
+                        </button>
+                        <button
+                          onClick={stopCamera}
+                          className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-colors"
+                        >
+                          <X className="w-4 h-4" /> Cancel
+                        </button>
                       </div>
-                      <button onClick={() => setPhotoUploaded(false)} className="ml-auto text-slate-500 hover:text-slate-300 text-xs">
-                        Remove
+                    </div>
+                  )}
+
+                  {/* Photo Preview or Upload Buttons */}
+                  {!photoPreview ? (
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={startCamera}
+                        disabled={uploadingPhoto || resolutionLoading}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 disabled:opacity-50 text-sm font-medium transition-colors"
+                      >
+                        <Camera className="w-4 h-4" /> Take Photo
                       </button>
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingPhoto || resolutionLoading}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                      >
+                        <ImageIcon className="w-4 h-4" /> Upload Photo
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  ) : (
+                    <div className="mb-3">
+                      <div className="rounded-xl border border-green-500/50 p-2 bg-green-500/10 mb-2">
+                        <img
+                          src={photoPreview}
+                          alt="Evidence preview"
+                          className="w-full h-48 object-cover rounded-lg"
+                        />
+                      </div>
+                      <button
+                        onClick={removePhoto}
+                        disabled={uploadingPhoto || resolutionLoading}
+                        className="text-slate-400 hover:text-slate-300 text-xs disabled:opacity-50 transition-colors"
+                      >
+                        ✎ Change Photo
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Error Message */}
+                  {resolutionError && (
+                    <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                      <p className="text-red-300 text-xs">{resolutionError}</p>
+                    </div>
+                  )}
+
+                  {/* Upload Status */}
+                  {uploadingPhoto && (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
+                      <Loader className="w-4 h-4 animate-spin text-blue-400" />
+                      <span className="text-blue-300 text-xs">Uploading photo...</span>
                     </div>
                   )}
                 </div>
@@ -584,8 +903,9 @@ export function PatrolDashboard() {
                   <textarea
                     value={resNotes}
                     onChange={(e) => setResNotes(e.target.value)}
+                    disabled={resolutionLoading}
                     placeholder="Describe how the incident was resolved..."
-                    className="w-full rounded-xl border border-slate-600 bg-slate-800 text-white placeholder-slate-500 text-sm p-3 resize-none outline-none focus:border-slate-400 transition-colors"
+                    className="w-full rounded-xl border border-slate-600 bg-slate-800 text-white placeholder-slate-500 text-sm p-3 resize-none outline-none focus:border-slate-400 transition-colors disabled:opacity-50"
                     rows={3}
                   />
                 </div>
@@ -593,18 +913,28 @@ export function PatrolDashboard() {
                 {/* Submit */}
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setShowResolution(false)}
-                    className="flex-1 py-3 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-colors"
+                    onClick={() => {
+                      stopCamera();
+                      setShowResolution(false);
+                    }}
+                    disabled={resolutionLoading}
+                    className="flex-1 py-3 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={submitResolution}
-                    disabled={!photoUploaded}
-                    className="flex-1 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: photoUploaded ? "#16a34a" : "#374151" }}
+                    disabled={!photoFile || resolutionLoading}
+                    className="flex-1 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    style={{ backgroundColor: (photoFile && !resolutionLoading) ? "#16a34a" : "#374151" }}
                   >
-                    Submit Resolution
+                    {resolutionLoading ? (
+                      <>
+                        <Loader className="w-4 h-4 animate-spin" /> Submitting...
+                      </>
+                    ) : (
+                      <>Submit Resolution</>
+                    )}
                   </button>
                 </div>
               </div>
@@ -612,6 +942,9 @@ export function PatrolDashboard() {
           </>
         )}
       </AnimatePresence>
+
+      {/* Hidden canvas for photo capture */}
+      <canvas ref={canvasRef} className="hidden" />
 
       {/* ── Decline Confirm ──────────────────────────────── */}
       <AnimatePresence>

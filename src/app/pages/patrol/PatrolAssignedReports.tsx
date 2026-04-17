@@ -6,7 +6,7 @@
  * 2. Available: Unassigned reports patrol officer can self-assign
  */
 
-import { useApi, fetchAdminAssignedReports, fetchAvailableReports } from "../../services/api";
+import { useApi, fetchAdminAssignedReports, fetchAvailableReports, fetchSubmittedPatrolReports } from "../../services/api";
 import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataStates";
 import { useNavigate } from "react-router";
 import { useState } from "react";
@@ -17,8 +17,7 @@ import {
   AlertTriangle, ArrowUpDown, Navigation, Zap, Check,
 } from "lucide-react";
 
-type Priority = "all" | "critical" | "high" | "medium" | "low";
-type QueueTab = "assigned" | "available";
+type QueueTab = "assigned" | "available" | "submitted";
 
 const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -65,21 +64,28 @@ export function PatrolAssignedReports() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<QueueTab>("assigned");
-  const [filter, setFilter] = useState<Priority>("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"distance" | "priority" | "time">("priority");
 
-  // Fetch both queues
+  // Fetch all three queues
   const { data: adminAssigned, loading: adminLoading } = useApi(() => 
     fetchAdminAssignedReports(user.id)
   );
   const { data: availableReports, loading: availableLoading } = useApi(fetchAvailableReports);
+  const { data: submittedReports, loading: submittedLoading } = useApi(fetchSubmittedPatrolReports);
 
-  const currentQueue = activeTab === "assigned" ? (adminAssigned ?? []) : (availableReports ?? []);
-  const isLoading = activeTab === "assigned" ? adminLoading : availableLoading;
+  const currentQueue = activeTab === "assigned" 
+    ? (adminAssigned ?? []) 
+    : activeTab === "available"
+      ? (availableReports ?? [])
+      : (submittedReports ?? []);
+  
+  const isLoading = 
+    activeTab === "assigned" ? adminLoading 
+    : activeTab === "available" ? availableLoading 
+    : submittedLoading;
 
   const filtered = currentQueue
-    .filter((r) => filter === "all" || r.priority === filter)
     .filter((r) =>
       search === "" ||
       r.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -94,7 +100,7 @@ export function PatrolAssignedReports() {
       return new Date(b.timeReported).getTime() - new Date(a.timeReported).getTime();
     });
 
-  const renderReportCard = (r: ReportCard, actionType: "admin" | "available") => {
+  const renderReportCard = (r: ReportCard, actionType: "admin" | "available" | "submitted") => {
     const pCfg = priorityConfig[r.priority] ?? priorityConfig.medium;
     const catColor = categoryColors[r.category] ?? "#6b7280";
 
@@ -161,7 +167,7 @@ export function PatrolAssignedReports() {
               >
                 <Check className="w-3 h-3" /> Accept
               </button>
-            ) : (
+            ) : actionType === "available" ? (
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(`/app/patrol/case/${r.id}?action=self-assign`); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors"
@@ -169,6 +175,10 @@ export function PatrolAssignedReports() {
               >
                 <Zap className="w-3 h-3" /> Self-Assign
               </button>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-medium">
+                <Clock className="w-3 h-3" /> Awaiting Review
+              </div>
             )}
           </div>
         </div>
@@ -191,12 +201,12 @@ export function PatrolAssignedReports() {
           <div>
             <h2 className="text-white font-bold text-base">Report Queues</h2>
             <p className="text-slate-400 text-xs mt-0.5">
-              {adminAssigned?.length ?? 0} admin-assigned · {availableReports?.length ?? 0} available
+              {adminAssigned?.length ?? 0} admin-assigned · {availableReports?.length ?? 0} available · {submittedReports?.length ?? 0} submitted
             </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="px-2.5 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: "#800000" }}>
-              {(adminAssigned?.length ?? 0) + (availableReports?.length ?? 0)} Total
+              {(adminAssigned?.length ?? 0) + (availableReports?.length ?? 0) + (submittedReports?.length ?? 0)} Total
             </div>
           </div>
         </div>
@@ -205,7 +215,7 @@ export function PatrolAssignedReports() {
       {/* Queue Tabs */}
       <div className="flex gap-2 border-b border-slate-700">
         <button
-          onClick={() => { setActiveTab("assigned"); setFilter("all"); setSearch(""); }}
+          onClick={() => { setActiveTab("assigned"); setSearch(""); }}
           className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
             activeTab === "assigned"
               ? "border-blue-500 text-blue-400"
@@ -215,7 +225,7 @@ export function PatrolAssignedReports() {
           Admin-Assigned ({adminAssigned?.length ?? 0})
         </button>
         <button
-          onClick={() => { setActiveTab("available"); setFilter("all"); setSearch(""); }}
+          onClick={() => { setActiveTab("available"); setSearch(""); }}
           className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
             activeTab === "available"
               ? "border-green-500 text-green-400"
@@ -223,6 +233,16 @@ export function PatrolAssignedReports() {
           }`}
         >
           Available to Self-Assign ({availableReports?.length ?? 0})
+        </button>
+        <button
+          onClick={() => { setActiveTab("submitted"); setSearch(""); }}
+          className={`px-4 py-2.5 font-medium text-sm transition-all border-b-2 ${
+            activeTab === "submitted"
+              ? "border-blue-500 text-blue-400"
+              : "border-transparent text-slate-500 hover:text-slate-400"
+          }`}
+        >
+          Awaiting Admin Review ({submittedReports?.length ?? 0})
         </button>
       </div>
 
@@ -247,24 +267,6 @@ export function PatrolAssignedReports() {
         </button>
       </div>
 
-      {/* Priority Filter */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {(["all", "critical", "high", "medium", "low"] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => setFilter(p)}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-              filter === p
-                ? "text-white border-transparent"
-                : "text-slate-400 border-slate-700 hover:text-white"
-            }`}
-            style={filter === p ? { backgroundColor: p === "all" ? "#800000" : priorityConfig[p]?.color ?? "#800000" } : {}}
-          >
-            {p === "all" ? "All" : priorityConfig[p].label}
-          </button>
-        ))}
-      </div>
-
       {/* Reports List */}
       {isLoading ? (
         <div className="space-y-3">
@@ -275,7 +277,14 @@ export function PatrolAssignedReports() {
       ) : (
         <div className="space-y-3">
           {filtered.map((r) => 
-            renderReportCard(r, activeTab === "assigned" ? "admin" : "available")
+            renderReportCard(
+              r, 
+              activeTab === "assigned" 
+                ? "admin" 
+                : activeTab === "available" 
+                  ? "available" 
+                  : "submitted"
+            )
           )}
         </div>
       )}
@@ -288,7 +297,9 @@ export function PatrolAssignedReports() {
           <p className="text-slate-400 text-sm">
             {activeTab === "assigned" 
               ? "No admin-assigned reports yet" 
-              : "No available reports to self-assign"}
+              : activeTab === "available"
+                ? "No available reports to self-assign"
+                : "No submitted resolutions awaiting review"}
           </p>
         </div>
       )}

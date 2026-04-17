@@ -71,6 +71,7 @@ async function apiFetch<T>(
     
     if (useSessionToken) {
       const accessToken = await getAccessToken();
+      console.log("[API] Got access token:", accessToken ? "✅ Present" : "❌ Missing");
       if (accessToken) {
         authHeader = `Bearer ${accessToken}`;
       } else {
@@ -88,14 +89,17 @@ async function apiFetch<T>(
     }
     
     const url = `${BASE_URL}${path}`;
-    console.log(`[API] ${options.method || "GET"} ${path}`);
+    const method = options.method || "GET";
+    console.log(`[API] ${method} ${path}`, { hasAuth: !!authHeader, url });
 
     const res = await fetch(url, { ...options, headers });
+    
+    console.log(`[API] Response: ${method} ${path} → ${res.status} ${res.statusText}`);
     
     // Debug: log response status
     if (!res.ok) {
       console.error(`[API] Request failed with status ${res.status}:`, {
-        method: options.method || "GET",
+        method,
         path,
         status: res.status,
         statusText: res.statusText,
@@ -130,7 +134,7 @@ export interface Report {
   user_id: string;
   title: string;
   category: string;
-  status: "pending_verification" | "approved" | "rejected" | "in_progress" | "resolved" | "accepted";
+  status: "pending_verification" | "approved" | "rejected" | "in_progress" | "resolved";
   location: string;
   timestamp: string;
   reporter: string;
@@ -140,6 +144,7 @@ export interface Report {
   verified: boolean;
   comments: number;
   upvotes: number;
+  is_anonymous?: boolean;
   approved_by?: string;
   approved_at?: string;
   rejected_by?: string;
@@ -294,6 +299,8 @@ export interface PatrolCaseSummary {
   reporter: string;
   reporterAvatar: string;
   description: string;
+  assignedTo?: string | null;
+  acceptedBy?: string | null;
 }
 
 export interface PatrolHistoryEntry {
@@ -464,6 +471,10 @@ export async function fetchAssignedReports(): Promise<ApiResponse<PatrolCaseSumm
   return apiFetch<PatrolCaseSummary[]>("/patrol/assigned");
 }
 
+export async function fetchSubmittedPatrolReports(): Promise<ApiResponse<PatrolCaseSummary[]>> {
+  return apiFetch<PatrolCaseSummary[]>("/patrol/submitted", {}, true);
+}
+
 export async function fetchPatrolHistory(): Promise<ApiResponse<PatrolHistoryEntry[]>> {
   return apiFetch<PatrolHistoryEntry[]>("/patrol/history");
 }
@@ -478,6 +489,10 @@ export async function fetchAdminAssignedReports(patrolUserId: string): Promise<A
 
 export async function fetchAvailableReports(): Promise<ApiResponse<PatrolCaseSummary[]>> {
   return apiFetch<PatrolCaseSummary[]>("/patrol/available", {}, true);
+}
+
+export async function fetchPatrolCase(caseId: string): Promise<ApiResponse<PatrolCaseSummary>> {
+  return apiFetch<PatrolCaseSummary>(`/patrol/case/${caseId}`, {}, true);
 }
 
 export async function fetchReportComments(reportId: string): Promise<ApiResponse<PatrolComment[]>> {
@@ -560,6 +575,43 @@ export async function rejectReport(
   return apiFetch<{ success: boolean; message: string; report: Report }>(
     `/admin/reports/${id}/reject`,
     { method: "POST", body: JSON.stringify({ reason }) }
+  );
+}
+
+/** Admin: Toggle anonymous flag on a report */
+export async function toggleAnonymousReport(
+  id: string
+): Promise<ApiResponse<{ success: boolean; reportId: string; isAnonymous: boolean; message: string }>> {
+  return apiFetch<{ success: boolean; reportId: string; isAnonymous: boolean; message: string }>(
+    `/admin/reports/${id}/toggle-anonymous`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
+/** Admin: Get submitted patrol resolutions awaiting verification */
+export async function fetchSubmittedReports(): Promise<ApiResponse<Report[]>> {
+  return apiFetch<Report[]>(`/admin/patrol-resolutions/pending`);
+}
+
+/** Admin: Approve a submitted patrol resolution */
+export async function approvePatrolResolution(
+  id: string,
+  adminNotes?: string
+): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
+  return apiFetch<{ success: boolean; message: string; report: Report }>(
+    `/admin/patrol-resolutions/${id}/verify`,
+    { method: "POST", body: JSON.stringify({ approved: true, adminNotes }) }
+  );
+}
+
+/** Admin: Reject a submitted patrol resolution */
+export async function rejectPatrolResolution(
+  id: string,
+  adminNotes?: string
+): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
+  return apiFetch<{ success: boolean; message: string; report: Report }>(
+    `/admin/patrol-resolutions/${id}/verify`,
+    { method: "POST", body: JSON.stringify({ approved: false, adminNotes }) }
   );
 }
 
@@ -675,6 +727,28 @@ export async function savePatrolHistory(
   return apiFetch<PatrolHistoryEntry>("/patrol/history", { method: "POST", body: JSON.stringify(data) });
 }
 
+/** Resolve a patrol case and log it to history */
+export async function resolvePatrolCase(
+  caseId: string,
+  resolutionNotes?: string,
+  evidenceUrl?: string,
+  category?: string
+): Promise<ApiResponse<{ success: boolean; message: string; report: any }>> {
+  return apiFetch(
+    "/patrol/history",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        caseId,
+        resolutionNotes,
+        evidenceUrl,
+        category,
+      }),
+    },
+    true
+  );
+}
+
 /** Admin assigns a report to a patrol officer */
 export async function assignPatrolToReport(
   reportId: string,
@@ -728,12 +802,37 @@ export async function acceptPatrolCase(caseId: string, patrolId?: string): Promi
   );
 }
 
+/** Patrol officer marks case as in_progress (responding) */
+export async function startPatrolResponse(caseId: string): Promise<ApiResponse<{ success: boolean; message: string; report: any }>> {
+  return apiFetch(
+    `/patrol/cases/${caseId}/start-responding`,
+    { method: "POST" },
+    true
+  );
+}
+
 /** Patrol officer cancels/unassigns a case */
 export async function cancelPatrolCase(caseId: string, patrolId?: string): Promise<ApiResponse<{ success: boolean }>> {
   const params = patrolId ? `?patrolId=${encodeURIComponent(patrolId)}` : "";
   return apiFetch<{ success: boolean }>(
     `/patrol/cases/${caseId}/cancel${params}`,
     { method: "POST" },
+    true
+  );
+}
+
+/** Admin verifies patrol resolution (approves or rejects) */
+export async function verifyPatrolResolution(
+  reportId: string,
+  approved: boolean,
+  adminNotes?: string
+): Promise<ApiResponse<{ success: boolean; message: string; newStatus: string; report: any }>> {
+  return apiFetch(
+    `/admin/patrol-resolutions/${reportId}/verify`,
+    {
+      method: "POST",
+      body: JSON.stringify({ approved, adminNotes }),
+    },
     true
   );
 }
