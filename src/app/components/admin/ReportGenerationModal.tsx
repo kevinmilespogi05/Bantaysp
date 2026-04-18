@@ -542,11 +542,11 @@ export function ReportGenerationModal({ isOpen, onClose }: { isOpen: boolean; on
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 flex items-center justify-center z-50 p-4 pointer-events-none"
           >
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col pointer-events-auto">
               {/* Header */}
-              <div className="sticky top-0 bg-gradient-to-r from-red-900 via-red-800 to-red-700 px-6 py-6 flex items-start justify-between border-b border-red-800">
+              <div className="flex-shrink-0 sticky top-0 bg-gradient-to-r from-red-900 via-red-800 to-red-700 px-6 py-6 flex items-start justify-between border-b border-red-800 z-10 rounded-t-2xl">
                 <div className="flex items-start gap-3">
                   <div className="bg-white/20 p-2.5 rounded-lg">
                     <BarChart3 className="w-5 h-5 text-white" />
@@ -565,7 +565,7 @@ export function ReportGenerationModal({ isOpen, onClose }: { isOpen: boolean; on
               </div>
 
               {/* Content */}
-              <div className="p-6 space-y-6">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {/* Date Range Section */}
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-900">
@@ -743,7 +743,7 @@ export function ReportGenerationModal({ isOpen, onClose }: { isOpen: boolean; on
               </div>
 
               {/* Footer */}
-              <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200 flex gap-3 justify-end rounded-b-2xl">
+              <div className="flex-shrink-0 bg-gray-50 px-6 py-4 border-t border-gray-200 flex gap-3 justify-end rounded-b-2xl">
                 <button
                   onClick={onClose}
                   disabled={generating}
