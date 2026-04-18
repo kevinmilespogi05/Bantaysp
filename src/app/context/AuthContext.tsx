@@ -1,14 +1,17 @@
 /**
- * AuthContext — Role-Based Access Control
+ * AuthContext — Role-Based Access Control (Non-Blocking Architecture)
  *
- * Auth is now backed by Supabase Auth. The `role` field is stored in
- * the user's `user_metadata` (set at sign-up or via the Supabase dashboard).
+ * Auth is backed by Supabase Auth. The `role` field is stored in the
+ * user_profiles table (database) — this is the single source of truth.
  *
- * Expected user_metadata shape:
- *   { name, role, barangay, avatar, unit?, badgeNumber?, rank?, shiftStart?, shiftEnd? }
+ * Architecture:
+ * 1. User logs in → Supabase Auth creates session
+ * 2. Immediately set user from session data (non-blocking)
+ * 3. In background: fetch user_profiles for role + metadata
+ * 4. Update user state when profile arrives
+ * 5. UI renders immediately; role loads in background
  *
- * The mock login fallback is kept behind DEV_MOCK_AUTH for local UI work
- * when Supabase isn't configured.
+ * This prevents UI blocking and ensures responsive experience even if DB is slow.
  */
 
 import {
@@ -16,6 +19,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   ReactNode,
 } from "react";
 import { useNavigate } from "react-router";
@@ -33,120 +37,119 @@ export interface AuthUser {
   avatar: string;
   role: UserRole;
   barangay: string;
-  // Patrol-specific fields
-  unit?: string;
-  badgeNumber?: string;
-  rank?: string;
-  shiftStart?: string;
-  shiftEnd?: string;
 }
 
-// ─── Helper: map Supabase User → AuthUser ────────────────────────────────────
+// ─── Helper: Create base user from Supabase User (non-blocking) ────────────────
 
 function mapSupabaseUser(user: User): AuthUser {
   const meta = (user.user_metadata ?? {}) as Record<string, string>;
   const firstName = meta.first_name ?? (meta.name ? meta.name.split(" ")[0] : "Unknown");
   const lastName = meta.last_name ?? (meta.name ? meta.name.split(" ").slice(1).join(" ") : "");
   const fullName = `${firstName}${lastName ? " " + lastName : ""}`;
+  
   return {
     id: user.id,
     first_name: firstName,
     last_name: lastName,
     avatar: meta.avatar ?? (fullName ? fullName.slice(0, 2).toUpperCase() : "?"),
-    role: (meta.role as UserRole) ?? "resident",
+    role: "resident", // Default to resident until DB confirms role
     barangay: meta.barangay ?? "",
-    unit: meta.unit,
-    badgeNumber: meta.badgeNumber,
-    rank: meta.rank,
-    shiftStart: meta.shiftStart,
-    shiftEnd: meta.shiftEnd,
   };
 }
 
-// Debug: log what we extract from session metadata
-function debugSessionMetadata(user: User): void {
-  const meta = (user.user_metadata ?? {}) as Record<string, string>;
-  console.log("[AuthContext] Session user_metadata:", {
-    userId: user.id,
-    email: user.email,
-    role: meta.role,
-    fullMetadata: meta,
-  });
-}
+// ─── Helper: Enrich user profile from database (background, non-blocking) ──────
 
-// ─── Helper: Fetch user profile from database and merge with session data ─────
-
-async function enrichUserWithDatabaseProfile(sessionUser: User): Promise<AuthUser> {
-  const mappedUser = mapSupabaseUser(sessionUser);
-  
-  // Debug: log what we got from session
-  debugSessionMetadata(sessionUser);
+async function enrichUserWithDatabaseProfile(
+  sessionUser: User,
+  signal?: AbortSignal
+): Promise<AuthUser | null> {
+  const baseUser = mapSupabaseUser(sessionUser);
   
   try {
-    // Create a timeout promise that rejects after 3 seconds
-    const queryPromise = supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", sessionUser.id)
-      .single();
-
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Database query timeout (3s)")), 3000)
-    );
-
-    const { data: profile, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
-    
-    if (error || !profile) {
-      if (error?.code !== "PGRST116") {
-        console.warn("[AuthContext] Database query failed, trusting session metadata:", {
-          userId: sessionUser.id,
-          error: error?.message,
-        });
-      }
-      return mappedUser;
+    if (signal?.aborted) {
+      console.log("[AuthContext] Enrichment aborted");
+      return null;
     }
 
-    console.log("[AuthContext] Database profile fetched successfully:", {
+    console.log("[AuthContext] Starting background database enrichment:", {
       userId: sessionUser.id,
-      dbRole: profile.role,
     });
 
-    // Parse patrol metadata from bio field if it exists
-    let patrolMetadata: Record<string, string> = {};
-    if (profile.bio) {
-      try {
-        patrolMetadata = typeof profile.bio === "string" ? JSON.parse(profile.bio) : profile.bio;
-      } catch (e) {
-        // If bio is not JSON, ignore it
+    // Query user_profiles with 5-second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const { data: profile, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", sessionUser.id)
+        .single();
+
+      clearTimeout(timeoutId);
+
+      if (signal?.aborted) {
+        console.log("[AuthContext] Enrichment request cancelled after fetch");
+        return null;
       }
-    }
 
-    // Merge: session role takes priority if it exists, otherwise use database
-    const finalRole = (mappedUser.role !== "resident") ? mappedUser.role : (profile.role as UserRole);
-    if (finalRole !== mappedUser.role) {
-      console.log("[AuthContext] Using database role instead of session role:", {
-        sessionRole: mappedUser.role,
-        dbRole: finalRole,
+      if (error) {
+        if (error.code !== "PGRST116") {
+          // PGRST116 = no rows (user doesn't exist in user_profiles yet)
+          console.warn("[AuthContext] Database fetch failed:", {
+            userId: sessionUser.id,
+            errorCode: error.code,
+            message: error.message,
+          });
+        } else {
+          console.log("[AuthContext] User not yet in user_profiles (pending approval):", {
+            userId: sessionUser.id,
+          });
+        }
+        return null;
+      }
+
+      if (!profile) {
+        console.warn("[AuthContext] No profile data returned");
+        return null;
+      }
+
+      console.log("[AuthContext] Database profile enriched successfully:", {
+        userId: sessionUser.id,
+        role: profile.role,
+        barangay: profile.barangay,
       });
-    }
 
-    // Return enriched user with best available data
-    return {
-      ...mappedUser,
-      role: finalRole,
-      barangay: profile.barangay || mappedUser.barangay,
-      unit: patrolMetadata.unit || mappedUser.unit,
-      badgeNumber: patrolMetadata.badgeNumber || mappedUser.badgeNumber,
-      rank: patrolMetadata.rank || mappedUser.rank,
-      shiftStart: patrolMetadata.shiftStart || mappedUser.shiftStart,
-      shiftEnd: patrolMetadata.shiftEnd || mappedUser.shiftEnd,
-    };
+      // Return enriched user with database data
+      return {
+        id: profile.id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        avatar: profile.avatar || baseUser.avatar,
+        role: (profile.role as UserRole) || "resident",
+        barangay: profile.barangay || "",
+      };
+    } catch (err) {
+      clearTimeout(timeoutId);
+      
+      if (err instanceof Error && err.name === "AbortError") {
+        console.warn("[AuthContext] Database enrichment timed out (5s):", {
+          userId: sessionUser.id,
+        });
+      } else {
+        console.error("[AuthContext] Database enrichment error:", {
+          userId: sessionUser.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return null;
+    }
   } catch (err) {
-    console.warn("[AuthContext] Error enriching user, using session metadata:", {
+    console.error("[AuthContext] Unexpected error in enrichment:", {
       userId: sessionUser.id,
       error: err instanceof Error ? err.message : String(err),
     });
-    return mappedUser;
+    return null;
   }
 }
 
@@ -161,28 +164,13 @@ const GUEST_USER: AuthUser = {
   barangay: "",
 };
 
-// Exported for PatrolLayout and other places that need patrol user data.
-// Will be replaced once the logged-in user has role === "patrol".
-export const patrolUserData: AuthUser = {
-  id: "PAT-001",
-  first_name: "Ramon",
-  last_name: "Dela Rosa",
-  avatar: "RD",
-  role: "patrol",
-  barangay: "Brgy. San Pablo Sector",
-  unit: "Unit 3 – Alpha",
-  badgeNumber: "PNP-8821",
-  rank: "Police Officer 1",
-  shiftStart: "06:00",
-  shiftEnd: "18:00",
-};
-
 // ─── Context shape ────────────────────────────────────────────────────────────
 
 interface AuthContextType {
   user: AuthUser;
   session: Session | null;
   isLoading: boolean;
+  isEnriching: boolean; // True if fetching DB profile in background
   /**
    * Sign in with email + password via Supabase Auth.
    * Returns an error string on failure, or null on success.
@@ -190,6 +178,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<string | null>;
   /** Sign out and redirect to landing */
   logout: () => void;
+  /** Refresh user role from database (e.g., after promotion) */
+  refreshRole: () => Promise<void>;
   // Convenience role booleans
   isPatrol: boolean;
   isAdmin: boolean;
@@ -207,15 +197,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser>(GUEST_USER);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEnriching, setIsEnriching] = useState(false);
+
+  // AbortController for cancelling in-flight enrichment requests
+  const enrichmentAbortControllerRef = useRef<AbortController | null>(null);
 
   // On mount: restore session (Supabase handles this automatically)
   useEffect(() => {
     let isMounted = true;
 
-    console.log("[AuthContext] useEffect: mount - starting initialization");
+    console.log("[AuthContext] Initializing auth on mount");
 
-    // Get the initial session and enrich with database profile
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Get the initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) {
         console.log("[AuthContext] Component unmounted before session restore");
         return;
@@ -228,37 +222,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       setSession(session);
+
       if (session?.user) {
-        // Fetch full user data from database to ensure role is correct
-        const enrichedUser = await enrichUserWithDatabaseProfile(
-          session.user
-        );
+        // Immediately set user from session (non-blocking)
+        const baseUser = mapSupabaseUser(session.user);
         if (isMounted) {
-          console.log("[AuthContext] Setting enriched user:", {
-            role: enrichedUser.role,
-            id: enrichedUser.id,
+          console.log("[AuthContext] Setting base user from session (non-blocking):", {
+            role: baseUser.role,
+            id: baseUser.id,
           });
-          setUser(enrichedUser);
+          setUser(baseUser);
+          setIsLoading(false);
+        }
+
+        // Start background enrichment (don't await, don't block UI)
+        if (isMounted) {
+          enrichmentAbortControllerRef.current?.abort();
+          enrichmentAbortControllerRef.current = new AbortController();
+          setIsEnriching(true);
+
+          enrichUserWithDatabaseProfile(
+            session.user,
+            enrichmentAbortControllerRef.current.signal
+          ).then((enrichedUser) => {
+            if (!isMounted || !enrichedUser) {
+              if (enrichedUser === null) {
+                console.log("[AuthContext] Background enrichment completed but skipped");
+              }
+              return;
+            }
+
+            console.log("[AuthContext] Background enrichment complete, updating user:", {
+              role: enrichedUser.role,
+              id: enrichedUser.id,
+            });
+            setUser(enrichedUser);
+            setIsEnriching(false);
+          });
         }
       } else {
         if (isMounted) {
-          console.log("[AuthContext] No session found, setting guest user");
+          console.log("[AuthContext] No session, setting guest user");
           setUser(GUEST_USER);
+          setIsLoading(false);
         }
       }
-      if (isMounted) {
-        setIsLoading(false);
-      }
     }).catch((err) => {
-      console.error("[AuthContext] Error getting initial session:", err);
+      console.error("[AuthContext] Error restoring session:", err);
       if (isMounted) {
+        setUser(GUEST_USER);
         setIsLoading(false);
       }
     });
 
     // Listen for auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event: string, session: Session | null) => {
+      (_event: string, session: Session | null) => {
         if (!isMounted) {
           return;
         }
@@ -270,34 +289,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         setSession(session);
+
         if (session?.user) {
-          // Fetch full user data from database to ensure role persists
-          const enrichedUser = await enrichUserWithDatabaseProfile(
-            session.user
-          );
+          // Immediately set base user (non-blocking)
+          const baseUser = mapSupabaseUser(session.user);
           if (isMounted) {
-            console.log("[AuthContext] Auth change: setting enriched user:", {
-              role: enrichedUser.role,
-              id: enrichedUser.id,
+            console.log("[AuthContext] Setting base user on auth change:", {
+              role: baseUser.role,
+              id: baseUser.id,
             });
-            setUser(enrichedUser);
+            setUser(baseUser);
+            setIsLoading(false);
+          }
+
+          // Start background enrichment
+          if (isMounted) {
+            enrichmentAbortControllerRef.current?.abort();
+            enrichmentAbortControllerRef.current = new AbortController();
+            setIsEnriching(true);
+
+            enrichUserWithDatabaseProfile(
+              session.user,
+              enrichmentAbortControllerRef.current.signal
+            ).then((enrichedUser) => {
+              if (!isMounted || !enrichedUser) {
+                if (enrichedUser === null) {
+                  console.log("[AuthContext] Background enrichment skipped on auth change");
+                }
+                return;
+              }
+
+              console.log("[AuthContext] Background enrichment updated user on auth change:", {
+                role: enrichedUser.role,
+                id: enrichedUser.id,
+              });
+              setUser(enrichedUser);
+              setIsEnriching(false);
+            });
           }
         } else {
           if (isMounted) {
-            console.log("[AuthContext] Auth change: setting guest user");
+            console.log("[AuthContext] Auth change: no session, setting guest");
             setUser(GUEST_USER);
+            setIsLoading(false);
+            setIsEnriching(false);
           }
-        }
-        if (isMounted) {
-          setIsLoading(false);
         }
       }
     );
 
     return () => {
-      console.log("[AuthContext] useEffect: cleanup");
+      console.log("[AuthContext] Cleanup on unmount");
       isMounted = false;
       subscription.unsubscribe();
+      enrichmentAbortControllerRef.current?.abort();
     };
   }, []);
 
@@ -334,14 +379,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   };
 
+  const refreshRole = async () => {
+    if (!session?.user) {
+      console.log("[AuthContext] Cannot refresh role: no session");
+      return;
+    }
+
+    console.log("[AuthContext] Refreshing user role from database");
+    setIsEnriching(true);
+
+    enrichmentAbortControllerRef.current?.abort();
+    enrichmentAbortControllerRef.current = new AbortController();
+
+    const enrichedUser = await enrichUserWithDatabaseProfile(
+      session.user,
+      enrichmentAbortControllerRef.current.signal
+    );
+
+    if (enrichedUser) {
+      console.log("[AuthContext] Role refreshed:", { newRole: enrichedUser.role });
+      setUser(enrichedUser);
+    }
+
+    setIsEnriching(false);
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         session,
         isLoading,
+        isEnriching,
         login,
         logout,
+        refreshRole,
         isPatrol: user.role === "patrol",
         isAdmin: user.role === "admin",
         isResident: user.role === "resident",

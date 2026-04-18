@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 import {
   useApi,
-  fetchPatrolUnits, fetchIncidentPins, fetchDispatchMessages,
+  fetchPatrolUnits, fetchIncidentPins, fetchDispatchMessages, fetchReports,
   updatePatrolUnit, updatePatrolIncident, sendPatrolMessage,
-  type PatrolUnit as PatrolUnitData, type IncidentPin as IncidentLocation, type PatrolDispatchMessage as PatrolMessage,
+  type PatrolUnit as PatrolUnitData, type IncidentPin as IncidentLocation, type PatrolDispatchMessage as PatrolMessage, type Report,
 } from "../../services/api";
 import { SkeletonCard, EmptyState } from "../../components/ui/DataStates";
 
@@ -143,7 +143,7 @@ function adminIcon() {
 
 // ─── Panel tabs ───────────────────────────────────────────────────────────────
 
-type PanelTab = "units" | "cases" | "messages" | "stats";
+type PanelTab = "units" | "cases" | "history" | "messages" | "stats";
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -152,15 +152,18 @@ export function AdminPatrolMonitoring() {
   const { data: unitsData }     = useApi(fetchPatrolUnits);
   const { data: incidentsData } = useApi(fetchIncidentPins);
   const { data: messagesData }  = useApi(fetchDispatchMessages);
+  const { data: reportsData }   = useApi(fetchReports);
 
   // Local state seeded from API — allows real-time mutations (reassign, send)
   const [units,     setUnits]     = useState<PatrolUnitData[]>([]);
   const [incidents, setIncidents] = useState<IncidentLocation[]>([]);
   const [messages,  setMessages]  = useState<PatrolMessage[]>([]);
+  const [reports,   setReports]   = useState<Report[]>([]);
 
   useEffect(() => { if (unitsData)     setUnits(unitsData);         }, [unitsData]);
   useEffect(() => { if (incidentsData) setIncidents(incidentsData); }, [incidentsData]);
   useEffect(() => { if (messagesData)  setMessages(messagesData);   }, [messagesData]);
+  useEffect(() => { if (reportsData)   setReports(reportsData);     }, [reportsData]);
 
   const [selectedPatrol, setSelectedPatrol] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
@@ -735,6 +738,7 @@ export function AdminPatrolMonitoring() {
             [
               { key: "units", icon: Users, label: "Units" },
               { key: "cases", icon: AlertTriangle, label: "Cases" },
+              { key: "history", icon: Activity, label: "History" },
               { key: "messages", icon: MessageSquare, label: "Msgs", badge: unreadCount },
               { key: "stats", icon: BarChart3, label: "Stats" },
             ] as { key: PanelTab; icon: React.ElementType; label: string; badge?: number }[]
@@ -897,151 +901,178 @@ export function AdminPatrolMonitoring() {
           {/* CASES TAB */}
           {tab === "cases" && (
             <div className="space-y-2">
-              {incidents
-                .sort((a, b) => {
-                  const p = { critical: 0, high: 1, medium: 2, low: 3 };
-                  return p[a.priority] - p[b.priority];
-                })
-                .map((inc) => {
-                  const assignedUnit = units.find((u) => u.id === inc.assignedPatrol);
-                  const isAssigning = assigningFor === inc.id;
-                  const nearby = isAssigning ? nearbyAvailable(inc.id) : [];
-                  return (
-                    <motion.div
-                      key={inc.id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="rounded-xl overflow-hidden"
-                      style={{
-                        background:
-                          selectedIncident === inc.id
-                            ? `${PRIORITY_COLOR[inc.priority]}12`
-                            : "rgba(255,255,255,0.04)",
-                        border: `1px solid ${selectedIncident === inc.id ? PRIORITY_COLOR[inc.priority] + "40" : "rgba(255,255,255,0.06)"}`,
-                      }}
-                    >
-                      <div
-                        className="p-2.5 cursor-pointer"
-                        onClick={() => selectIncident(inc.id)}
+              {/* Display reports with status (excluding resolved) */}
+              {reports.filter(r => r.status !== "resolved").length > 0 ? (
+                reports
+                  .filter(r => r.status !== "resolved")
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .map((report) => {
+                    const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
+                      "pending_verification": { bg: "rgba(245,158,11,0.15)", text: "#fbbf24", dot: "#fbbf24" },
+                      "approved": { bg: "rgba(34,197,94,0.15)", text: "#86efac", dot: "#22c55e" },
+                      "rejected": { bg: "rgba(239,68,68,0.15)", text: "#fca5a5", dot: "#ef4444" },
+                      "in_progress": { bg: "rgba(59,130,246,0.15)", text: "#93c5fd", dot: "#3b82f6" },
+                      "resolved": { bg: "rgba(168,85,247,0.15)", text: "#d8b4fe", dot: "#a855f7" },
+                    };
+                    
+                    const statusConfig = statusColors[report.status] || { bg: "rgba(107,114,128,0.15)", text: "#d1d5db", dot: "#6b7280" };
+                    
+                    return (
+                      <motion.div
+                        key={report.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-xl overflow-hidden"
+                        style={{
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                        }}
                       >
-                        <div className="flex items-start gap-2">
-                          <div
-                            className="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                            style={{ background: PRIORITY_COLOR[inc.priority] }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span
-                                className="px-1.5 py-0.5 rounded"
-                                style={{
-                                  background: PRIORITY_BG[inc.priority],
-                                  color: PRIORITY_COLOR[inc.priority],
-                                  fontSize: 9,
-                                  fontWeight: 700,
-                                  textTransform: "uppercase",
-                                }}
-                              >
-                                {inc.priority}
-                              </span>
-                              {!inc.assignedPatrol && (
+                        <div className="p-3">
+                          <div className="flex items-start gap-2">
+                            <div
+                              className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                              style={{ background: statusConfig.dot }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap mb-1">
                                 <span
-                                  className="px-1.5 py-0.5 rounded"
-                                  style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", fontSize: 9, fontWeight: 700 }}
+                                  className="px-2 py-1 rounded text-xs font-bold uppercase"
+                                  style={{ background: statusConfig.bg, color: statusConfig.text }}
                                 >
-                                  UNASSIGNED
+                                  {report.status.replace(/_/g, " ")}
                                 </span>
-                              )}
-                            </div>
-                            <div className="text-white font-semibold mt-0.5" style={{ fontSize: 11 }}>{inc.title}</div>
-                            <div className="flex items-center gap-1 text-gray-500 mt-0.5">
-                              <MapPin className="w-2.5 h-2.5" />
-                              <span style={{ fontSize: 10 }}>{inc.address}</span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              {assignedUnit ? (
-                                <span className="text-green-400" style={{ fontSize: 10 }}>
-                                  ✓ {assignedUnit.name}
+                                {report.verified && (
+                                  <span className="px-2 py-1 rounded text-xs font-bold" style={{ background: "rgba(34,197,94,0.15)", color: "#86efac" }}>
+                                    ✓ VERIFIED
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-white font-semibold" style={{ fontSize: "13px" }}>
+                                {report.title}
+                              </div>
+                              <div className="text-gray-400 text-xs mt-0.5 line-clamp-1">
+                                {report.category}
+                              </div>
+                              <div className="flex items-center gap-1 text-gray-500 text-xs mt-1">
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                <span>{report.location}</span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-2 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <div
+                                    className="w-5 h-5 rounded-full flex items-center justify-center text-white"
+                                    style={{ background: "#6b7280", fontSize: "8px", fontWeight: 700 }}
+                                  >
+                                    {report.avatar}
+                                  </div>
+                                  <span className="text-gray-400">{report.reporter}</span>
+                                </div>
+                                <span className="text-gray-600 ml-auto">
+                                  {timeAgo(report.timestamp)}
                                 </span>
-                              ) : (
-                                <span className="text-red-400" style={{ fontSize: 10 }}>No patrol assigned</span>
-                              )}
-                              <span className="text-gray-600 ml-auto" style={{ fontSize: 10 }}>
-                                {formatTime(inc.timeReported)}
-                              </span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
+                    );
+                  })
+              ) : (
+                <div className="text-center py-8">
+                  <AlertTriangle className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                  <p className="text-gray-500 text-sm">No active cases. Check History for resolved reports.</p>
+                </div>
+              )}
+            </div>
+          )}
 
-                      {/* Assignment flow */}
-                      <AnimatePresence>
-                        {isAssigning && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="overflow-hidden"
-                          >
+          {/* HISTORY TAB */}
+          {tab === "history" && (
+            <div className="space-y-2">
+              {/* Display resolved reports */}
+              {reports.filter((r) => r.status === "resolved").length > 0 ? (
+                reports
+                  .filter((r) => r.status === "resolved")
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .map((report) => {
+                    return (
+                      <motion.div
+                        key={report.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-xl overflow-hidden"
+                        style={{
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                        }}
+                      >
+                        <div className="p-3">
+                          <div className="flex items-start gap-2">
                             <div
-                              className="px-3 py-2.5"
-                              style={{ borderTop: "1px solid rgba(255,255,255,0.07)", background: "rgba(0,0,0,0.2)" }}
-                            >
-                              <div className="flex items-center gap-1.5 mb-2">
-                                <Zap className="w-3 h-3 text-yellow-400" />
-                                <span className="text-yellow-300" style={{ fontSize: 10, fontWeight: 700 }}>
-                                  Smart Suggest — Nearest Available
+                              className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                              style={{ background: "#a855f7" }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                <span
+                                  className="px-2 py-1 rounded text-xs font-bold uppercase"
+                                  style={{ background: "rgba(168,85,247,0.15)", color: "#d8b4fe" }}
+                                >
+                                  ✓ Resolved
                                 </span>
+                                {report.verified && (
+                                  <span className="px-2 py-1 rounded text-xs font-bold" style={{ background: "rgba(34,197,94,0.15)", color: "#86efac" }}>
+                                    ✓ VERIFIED
+                                  </span>
+                                )}
                               </div>
-                              {nearby.length === 0 ? (
-                                <p className="text-gray-500" style={{ fontSize: 10 }}>No available patrols nearby.</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {nearby.slice(0, 3).map((u, idx) => (
-                                    <div
-                                      key={u.id}
-                                      className="flex items-center gap-2 rounded-lg p-2"
-                                      style={{ background: "rgba(255,255,255,0.05)" }}
-                                    >
-                                      {idx === 0 && (
-                                        <Star className="w-2.5 h-2.5 text-yellow-400 shrink-0" />
-                                      )}
-                                      <div
-                                        className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0"
-                                        style={{ background: STATUS_COLOR[u.status], fontSize: 8, fontWeight: 700 }}
-                                      >
-                                        {u.avatar}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="text-white" style={{ fontSize: 10, fontWeight: 600 }}>{u.name}</div>
-                                        <div className="text-gray-500" style={{ fontSize: 9 }}>
-                                          {u.distKm.toFixed(2)} km · {STATUS_LABEL[u.status]}
-                                        </div>
-                                      </div>
-                                      <button
-                                        onClick={() => assignPatrol(inc.id, u.id)}
-                                        className="px-2 py-1 rounded-lg text-white transition-all hover:opacity-90 shrink-0"
-                                        style={{ background: "#800000", fontSize: 9 }}
-                                      >
-                                        Assign
-                                      </button>
-                                    </div>
-                                  ))}
+                              <div className="text-white font-semibold" style={{ fontSize: "13px" }}>
+                                {report.title}
+                              </div>
+                              <div className="text-gray-400 text-xs mt-0.5 line-clamp-1">
+                                {report.category}
+                              </div>
+                              <div className="flex items-center gap-1 text-gray-500 text-xs mt-1">
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                <span>{report.location}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                                <div>
+                                  <span className="text-gray-500">Reported:</span>
+                                  <div className="text-gray-300">{timeAgo(report.timestamp)}</div>
                                 </div>
-                              )}
-                              <button
-                                onClick={() => { setAssigningFor(null); setSelectedIncident(null); }}
-                                className="mt-2 w-full py-1 rounded-lg text-gray-500 hover:text-gray-300 transition-colors"
-                                style={{ fontSize: 10 }}
-                              >
-                                Cancel
-                              </button>
+                                <div>
+                                  <span className="text-gray-500">Resolved:</span>
+                                  <div className="text-gray-300">{report.resolved_at ? timeAgo(report.resolved_at) : "—"}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 mt-2 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <div
+                                    className="w-5 h-5 rounded-full flex items-center justify-center text-white"
+                                    style={{ background: "#6b7280", fontSize: "8px", fontWeight: 700 }}
+                                  >
+                                    {report.avatar}
+                                  </div>
+                                  <span className="text-gray-400">{report.reporter}</span>
+                                </div>
+                                {report.resolved_by && (
+                                  <span className="ml-auto text-green-400">Closed by Admin</span>
+                                )}
+                              </div>
                             </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-                  );
-                })}
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+              ) : (
+                <div className="text-center py-8">
+                  <CheckCircle className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                  <p className="text-gray-500 text-sm">No resolved reports yet</p>
+                </div>
+              )}
             </div>
           )}
 

@@ -2024,6 +2024,128 @@ app.post("/admin/reject-user/:userId", async (req, res) => {
   }
 });
 
+/** POST /admin/promote-to-patrol - Promote resident to patrol officer */
+app.post("/admin/promote-to-patrol", async (req, res) => {
+  try {
+    const { userId, unit, badgeNumber, rank, shiftStart, shiftEnd } = req.body;
+
+    if (!userId || !unit || !badgeNumber) {
+      return res.status(400).json({ error: "Missing required fields: userId, unit, badgeNumber" });
+    }
+
+    console.log(`[PromoteToPatrol] Promoting user ${userId} to patrol officer...`);
+
+    // Get user profile data
+    const { data: userProfile, error: fetchError } = await supabase
+      .from("user_profiles")
+      .select("first_name, last_name, avatar, phone")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !userProfile) {
+      console.error(`[PromoteToPatrol] Error fetching user profile:`, fetchError);
+      return res.status(500).json({ error: "User profile not found" });
+    }
+
+    // Update user profile role to 'patrol'
+    const { error: updateError } = await supabase
+      .from("user_profiles")
+      .update({
+        role: "patrol",
+        bio: JSON.stringify({ unit, badgeNumber, rank, shiftStart, shiftEnd }),
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error(`[PromoteToPatrol] Error updating user profile:`, updateError);
+      return res.status(500).json({ error: "Failed to promote user" });
+    }
+
+    // Create patrol_units entry with San Pablo coordinates
+    const patrolName = `${userProfile.first_name} ${userProfile.last_name}`;
+    const patrolAvatar = userProfile.avatar || userProfile.first_name?.[0] || "P";
+
+    const { error: createError } = await supabase
+      .from("patrol_units")
+      .insert({
+        id: `patrol-${userId}`,
+        name: patrolName,
+        avatar: patrolAvatar,
+        unit: unit,
+        badge_number: badgeNumber,
+        rank: rank,
+        status: "available",
+        current_case: null,
+        current_case_title: null,
+        location_lat: 15.0648,  // San Pablo, Castellejo
+        location_lng: 120.1982, // San Pablo, Castellejo
+        phone: userProfile.phone || "",
+        cases_today: 0,
+        shift_start: shiftStart,
+        shift_end: shiftEnd,
+      });
+
+    if (createError) {
+      console.error(`[PromoteToPatrol] Error creating patrol unit:`, createError);
+      console.log(`[PromoteToPatrol] Promotion succeeded but patrol unit creation failed - user promoted with role 'patrol'`);
+    } else {
+      console.log(`[PromoteToPatrol] ✅ Patrol unit created: ${patrolName}`);
+    }
+
+    console.log(`[PromoteToPatrol] Successfully promoted user ${userId} to patrol`);
+    res.json({ success: true, message: "User promoted to patrol officer" });
+  } catch (err) {
+    console.error(`[PromoteToPatrol] Error:`, err);
+    res.status(500).json({ error: "Failed to promote user" });
+  }
+});
+
+/** POST /admin/demote-from-patrol - Demote patrol officer back to resident */
+app.post("/admin/demote-from-patrol", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "Missing required field: userId" });
+    }
+
+    console.log(`[DemoteFromPatrol] Demoting user ${userId} from patrol to resident...`);
+
+    // Update user profile role to 'resident'
+    const { error: updateError } = await supabase
+      .from("user_profiles")
+      .update({
+        role: "resident",
+        bio: null,
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error(`[DemoteFromPatrol] Error updating user profile:`, updateError);
+      return res.status(500).json({ error: "Failed to demote user" });
+    }
+
+    // Delete patrol_units entry
+    const { error: deleteError } = await supabase
+      .from("patrol_units")
+      .delete()
+      .eq("id", `patrol-${userId}`);
+
+    if (deleteError) {
+      console.error(`[DemoteFromPatrol] Error deleting patrol unit:`, deleteError);
+      // Still succeed even if patrol_units deletion fails
+    } else {
+      console.log(`[DemoteFromPatrol] ✅ Patrol unit deleted`);
+    }
+
+    console.log(`[DemoteFromPatrol] Successfully demoted user ${userId} to resident`);
+    res.json({ success: true, message: "User demoted to resident" });
+  } catch (err) {
+    console.error(`[DemoteFromPatrol] Error:`, err);
+    res.status(500).json({ error: "Failed to demote user" });
+  }
+});
+
 // ─── Admin Report Verification ───────────────────────────────────────────────
 
 /** GET /admin/reports/pending - Get pending verification reports */
@@ -3561,6 +3683,7 @@ app.get("/patrol/incidents", async (req, res) => {
     const { data: incidents, error } = await supabase
       .from("reports")
       .select("*")
+      .in("status", ["pending", "approved", "accepted", "in_progress"])
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -3581,11 +3704,12 @@ app.get("/patrol/incidents", async (req, res) => {
       },
       address: incident.location || "Olongapo, Philippines",
       status: incident.status || "pending",
-      assignedPatrol: null,
+      // Convert user UUID to patrol unit ID format if assigned
+      assignedPatrol: incident.patrol_assigned_to ? `patrol-${incident.patrol_assigned_to}` : null,
       timeReported: incident.timestamp || incident.created_at,
     }));
 
-    console.log(`[PatrolIncidents] ✅ Returning ${transformedIncidents.length} incidents from reports`);
+    console.log(`[PatrolIncidents] ✅ Returning ${transformedIncidents.length} active incidents from reports`);
     res.json(transformedIncidents);
   } catch (err) {
     console.error(`[PatrolIncidents] Error:`, err);
@@ -3620,6 +3744,137 @@ app.get("/patrol/messages", async (req, res) => {
   } catch (err) {
     console.error(`[PatrolMessages] Error:`, err);
     res.status(500).json({ error: "Failed to fetch patrol messages" });
+  }
+});
+
+/** PUT /patrol/incidents/:id - Update incident status */
+app.put("/patrol/incidents/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, assignedPatrol } = req.body;
+
+    console.log(`[PatrolIncidentUpdate] Updating incident ${id} with:`, { status, assignedPatrol });
+
+    if (!id) {
+      return res.status(400).json({ error: "Missing incident ID" });
+    }
+
+    const updateData: any = {};
+    if (status) {
+      // Map frontend status to valid database status
+      const statusMap: { [key: string]: string } = {
+        assigned: "accepted",
+        en_route: "accepted",
+        arrived: "in_progress",
+        completed: "resolved",
+      };
+      updateData.status = statusMap[status] || status;
+    }
+    
+    // If assignedPatrol looks like "patrol-{uuid}", extract the uuid part
+    if (assignedPatrol) {
+      if (assignedPatrol.startsWith("patrol-")) {
+        // Extract user UUID from "patrol-{uuid}"
+        const userUuid = assignedPatrol.substring(7); // Remove "patrol-" prefix
+        console.log(`[PatrolIncidentUpdate] Extracted user UUID from patrol ID:`, userUuid);
+        updateData.patrol_assigned_to = userUuid;
+      } else {
+        updateData.patrol_assigned_to = assignedPatrol;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
+
+    console.log(`[PatrolIncidentUpdate] Executing update with data:`, updateData);
+
+    const { data, error } = await supabase
+      .from("reports")
+      .update(updateData)
+      .eq("id", id)
+      .select();
+
+    if (error) {
+      console.error(`[PatrolIncidentUpdate] Supabase error:`, error);
+      throw error;
+    }
+
+    console.log(`[PatrolIncidentUpdate] ✅ Updated incident ${id}`);
+    res.json({ success: true, data: data?.[0] });
+  } catch (err) {
+    console.error(`[PatrolIncidentUpdate] Error:`, err);
+    res.status(500).json({ error: "Failed to update incident", details: (err as any).message });
+  }
+});
+
+/** PUT /patrol/units/:id - Update patrol unit location/status */
+app.put("/patrol/units/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, location_lat, location_lng, current_case } = req.body;
+
+    console.log(`[PatrolUnitUpdate] Updating unit ${id}...`);
+
+    const updateData: any = {};
+    if (status) updateData.status = status;
+    if (location_lat !== undefined) updateData.location_lat = location_lat;
+    if (location_lng !== undefined) updateData.location_lng = location_lng;
+    if (current_case !== undefined) updateData.current_case = current_case;
+
+    const { data, error } = await supabase
+      .from("patrol_units")
+      .update(updateData)
+      .eq("id", id)
+      .select();
+
+    if (error) throw error;
+
+    console.log(`[PatrolUnitUpdate] ✅ Updated unit ${id}`);
+    res.json({ success: true, data: data?.[0] });
+  } catch (err) {
+    console.error(`[PatrolUnitUpdate] Error:`, err);
+    res.status(500).json({ error: "Failed to update patrol unit" });
+  }
+});
+
+/** POST /patrol/messages - Create a new patrol message */
+app.post("/patrol/messages", async (req, res) => {
+  try {
+    const { from, to, message } = req.body;
+
+    if (!from || !to || !message) {
+      return res.status(400).json({ error: "Missing required fields: from, to, message" });
+    }
+
+    console.log(`[PatrolMessageCreate] Creating message from ${from} to ${to}...`);
+
+    // Generate a random BIGINT ID for patrol_messages (use current timestamp + random)
+    const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    console.log(`[PatrolMessageCreate] Generated message ID:`, messageId);
+
+    const { data, error } = await supabase
+      .from("patrol_messages")
+      .insert({
+        id: messageId,
+        from,
+        to,
+        message,
+        read: false,
+        created_at: new Date().toISOString(),
+      })
+      .select();
+
+    if (error) {
+      console.error(`[PatrolMessageCreate] Supabase error:`, error);
+      throw error;
+    }
+
+    console.log(`[PatrolMessageCreate] ✅ Created patrol message`);
+    res.json({ success: true, data: data?.[0] });
+  } catch (err) {
+    console.error(`[PatrolMessageCreate] Error:`, err);
+    res.status(500).json({ error: "Failed to create patrol message", details: (err as any).message });
   }
 });
 

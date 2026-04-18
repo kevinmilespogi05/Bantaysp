@@ -8,9 +8,11 @@
  */
 
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { X, UserPlus, AlertTriangle, CheckCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "../../context/AuthContext";
 import type { UserProfile } from "../services/api";
 
 interface PromoteToPatrolModalProps {
@@ -29,6 +31,8 @@ interface PromoteToPatrolModalProps {
  * 4. Logs the action for audit trail
  */
 export function PromoteToPatrolModal({ isOpen, onClose, user, onSuccess }: PromoteToPatrolModalProps) {
+  const navigate = useNavigate();
+  const { user: currentUser, refreshRole } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -72,7 +76,7 @@ export function PromoteToPatrolModal({ isOpen, onClose, user, onSuccess }: Promo
 
       // Call backend API endpoint `/admin/promote-to-patrol`
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/make-server-5f514c57/admin/promote-to-patrol`,
+        `http://localhost:3000/admin/promote-to-patrol`,
         {
           method: "POST",
           headers: {
@@ -98,11 +102,35 @@ export function PromoteToPatrolModal({ isOpen, onClose, user, onSuccess }: Promo
 
       // Success!
       setSuccess(true);
-      setTimeout(() => {
-        onSuccess?.();
-        onClose();
-        setSuccess(false);
-      }, 1500);
+
+      // If the promoted user is the currently logged-in user, refresh their role
+      if (user.id === currentUser?.id) {
+        console.log("[PromoteToPatrolModal] User promoted - current user match detected");
+        console.log("[PromoteToPatrolModal] Before refresh - role:", currentUser?.role);
+        
+        await refreshRole();
+        
+        console.log("[PromoteToPatrolModal] refreshRole() completed");
+
+        // Wait for React to process the state update, then navigate to /app
+        // RoleBasedRedirect will then route based on the new role
+        setTimeout(() => {
+          console.log("[PromoteToPatrolModal] Navigating to /app to trigger role-based redirect");
+          navigate("/app", { replace: true });
+          
+          setTimeout(() => {
+            onSuccess?.();
+            onClose();
+            setSuccess(false);
+          }, 500);
+        }, 1000); // Give React time to process the state update
+      } else {
+        setTimeout(() => {
+          onSuccess?.();
+          onClose();
+          setSuccess(false);
+        }, 1500);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to promote user";
       setError(msg);

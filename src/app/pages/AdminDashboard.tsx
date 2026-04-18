@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import {
   Users, FileText, CheckCircle, Clock, TrendingUp, AlertTriangle,
   MapPin, Shield, UserCheck, BarChart3, Settings, Eye,
-  Download, Filter, Search, Radio, ChevronDown, MoreHorizontal, type LucideIcon, UserPlus, MessageSquare, X,
+  Download, Filter, Search, Radio, ChevronDown, MoreHorizontal, type LucideIcon, MessageSquare, X,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -21,7 +21,6 @@ import {
   fetchCategoryData,
   fetchLeaderboard,
   fetchAllUsers,
-  fetchVerifiedUsers,
   updateReport,
   deleteReport,
   approveUser,
@@ -43,10 +42,10 @@ import {
 } from "../components/ui/DataStates";
 import { ImageViewerModal } from "../components/ui/ImageViewerModal";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
-import { PromoteToPatrolModal } from "../components/ui/PromoteToPatrolModal";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { BantayLogo } from "../components/ui/BantayLogo";
+import { UsersTab } from "../components/admin/UsersTab";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
@@ -97,10 +96,6 @@ export function AdminDashboard() {
   const [submittedResolutionNotes, setSubmittedResolutionNotes] = useState("");
   const [processingSubmittedId, setProcessingSubmittedId] = useState<string | null>(null);
   
-  // Patrol promotion modal state
-  const [promoteModalOpen, setPromoteModalOpen] = useState(false);
-  const [selectedUserForPromotion, setSelectedUserForPromotion] = useState<any>(null);
-  
   // Confirm dialog state
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
@@ -114,6 +109,7 @@ export function AdminDashboard() {
   const [optimisticAnonymousToggles, setOptimisticAnonymousToggles] = useState<Record<string, boolean>>({});
 
   const activeTab = (searchParams.get("tab") ?? "overview") as AdminTab;
+  console.log("[AdminDashboard] activeTab:", activeTab, "| users tab active?", activeTab === "users");
   const setTab = (tab: AdminTab) => {
     if (tab === "chat") { navigate("/app/admin/chat"); return; }
     if (tab === "patrol") { navigate("/app/admin/patrol-monitoring"); return; }
@@ -128,7 +124,6 @@ export function AdminDashboard() {
   const { data: monthlyData } = useApi(fetchMonthlyTrends);
   const { data: categoryData } = useApi(fetchCategoryData);
   const { data: leaderboard, loading: lbLoading } = useApi(fetchLeaderboard);
-  const { data: verifiedUsers, loading: verifiedUsersLoading, refetch: refetchVerifiedUsers } = useApi(fetchVerifiedUsers);
   const { data: pendingUsers, loading: pendingUsersLoading, refetch: refetchPendingUsers } = useApi(fetchAllUsers);
 
   const filteredReports = (reports ?? []).filter(
@@ -185,7 +180,6 @@ export function AdminDashboard() {
       if (result.data?.success) {
         showToast(`${confirmAction.userName} approved and verified! ✨`, "success");
         await refetchPendingUsers();
-        await refetchVerifiedUsers();
         await retryStats();
       } else {
         showToast(`Failed to approve user: ${result.error}`, "error");
@@ -741,85 +735,6 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {/* ── Users Tab ── */}
-      {activeTab === "users" && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">Registered Users</h3>
-            <span className="text-gray-400 text-sm">
-              {stats ? `${stats.totalUsers.toLocaleString()} total` : "—"}
-            </span>
-          </div>
-          {verifiedUsersLoading ? (
-            <SkeletonList rows={6} />
-          ) : !verifiedUsers || verifiedUsers.length === 0 ? (
-            <EmptyState icon={Users} title="No registered users yet" description="Residents who sign up will appear here" />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {["User", "Barangay", "Role", "Reports", "Points", "Verified", "Actions"].map((h) => (
-                      <th key={h} className="px-5 py-3 text-left text-gray-400 font-medium" style={{ fontSize: "12px" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {verifiedUsers.map((u, i) => (
-                    <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>{u.avatar}</div>
-                          <span className="font-medium text-gray-900 text-sm">{u.first_name} {u.last_name}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-gray-500 text-sm">{u.barangay}</td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: u.role === "admin" ? "#dc262615" : u.role === "patrol" ? "#0891b215" : "#e5e7eb",
-                            color: u.role === "admin" ? "#dc2626" : u.role === "patrol" ? "#0891b2" : "#6b7280",
-                          }}>{u.role}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-gray-700 text-sm">{u.reports || 0}</td>
-                      <td className="px-5 py-3.5 font-bold text-sm" style={{ color: "#800000" }}>{(u.points || 0).toLocaleString()}</td>
-                      <td className="px-5 py-3.5">
-                        {u.verified
-                          ? <span className="flex items-center gap-1 text-green-700 text-xs font-medium"><CheckCircle className="w-3.5 h-3.5" /> Verified</span>
-                          : <span className="text-amber-600 text-xs font-medium">Pending</span>}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <button 
-                          onClick={() => {
-                            if (u.role === "resident") {
-                              setSelectedUserForPromotion(u);
-                              setPromoteModalOpen(true);
-                            }
-                          }}
-                          disabled={u.role !== "resident"}
-                          className={`p-1.5 rounded-lg transition-colors ${
-                            u.role === "resident"
-                              ? "hover:bg-gray-100 cursor-pointer"
-                              : "opacity-50 cursor-not-allowed"
-                          }`}
-                          title={u.role === "resident" ? "Promote to Patrol" : `Already a ${u.role}`}
-                        >
-                          {u.role === "resident" ? (
-                            <UserPlus className="w-3.5 h-3.5 text-blue-500" />
-                          ) : (
-                            <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
-                          )}
-                        </button>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-          )}
-
           {/* Pending Verification View */}
           {reportsSubTab === "pending-verification" && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1367,6 +1282,9 @@ export function AdminDashboard() {
         </div>
       )}
 
+      {/* ── Users Tab ── */}
+      {activeTab === "users" && <UsersTab stats={stats} />}
+
       {/* ── Verification Queue Tab ── */}
       {activeTab === "verification" && (
         <div className="space-y-4">
@@ -1644,19 +1562,6 @@ export function AdminDashboard() {
         isLoading={processingUserId !== null}
       />
 
-      {/* ── Promote to Patrol Modal ── */}
-      <PromoteToPatrolModal
-        isOpen={promoteModalOpen}
-        onClose={() => {
-          setPromoteModalOpen(false);
-          setSelectedUserForPromotion(null);
-        }}
-        user={selectedUserForPromotion}
-        onSuccess={() => {
-          refetchVerifiedUsers();
-          showToast("User promoted to patrol officer!", "success");
-        }}
-      />
     </div>
   );
 }
