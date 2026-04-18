@@ -1,5 +1,19 @@
 services:
   - type: web
+    name: bantaysp-bold-reports
+    env: docker
+    dockerfilePath: ./Dockerfile.boldreports
+    plan: free
+    region: singapore
+    envVars:
+      - key: REPORT_SERVICE_PORT
+        value: 3001
+      # Add BOLD_LICENSE_KEY via Render dashboard if using Enterprise Edition
+      # For Community Edition (free), no license key needed
+    autoDeploy: false
+    maxInstances: 1
+
+  - type: web
     name: bantaysp-backend
     env: node
     plan: free
@@ -17,3 +31,6 @@ services:
       # - CLOUDINARY_CLOUD_NAME
       # - CLOUDINARY_API_KEY
       # - CLOUDINARY_API_SECRET
+      # - BOLD_REPORTS_API_URL (once Bold Reports is deployed)
+      # - BOLD_REPORTS_TIMEOUT_MS
+      # - BOLD_REPORTS_MAX_RECORDS
