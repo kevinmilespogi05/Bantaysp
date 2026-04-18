@@ -1033,6 +1033,33 @@ export async function adjustLeaderboardPoints(data: {
   return apiFetch<any>("/leaderboard/adjust-points", { method: "PUT", body: JSON.stringify(data) });
 }
 
+// ─── Visitor Tracking ─────────────────────────────────────────────────────────
+
+export interface VisitorCount {
+  total: number;
+  unique: number;
+  today: number;
+}
+
+/** Generate a unique session ID for visitor tracking */
+export function generateSessionId(): string {
+  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/** Track a visitor on the home page */
+export async function trackVisitor(sessionId: string): Promise<ApiResponse<{ success: boolean; alreadyTracked?: boolean }>> {
+  return apiFetch<{ success: boolean; alreadyTracked?: boolean }>(
+    "/visitors/track",
+    { method: "POST", body: JSON.stringify({ sessionId }) },
+    false
+  );
+}
+
+/** Fetch current visitor count */
+export async function fetchVisitorCount(): Promise<ApiResponse<VisitorCount>> {
+  return apiFetch<VisitorCount>("/visitors/count", {}, false);
+}
+
 // ─── useApi — Generic async read hook ────────────────────────────────────────
 
 export function useApi<T>(

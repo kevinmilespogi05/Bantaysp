@@ -546,7 +546,7 @@ export function ReportGenerationModal({ isOpen, onClose }: { isOpen: boolean; on
           >
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col pointer-events-auto">
               {/* Header */}
-              <div className="flex-shrink-0 sticky top-0 bg-gradient-to-r from-red-900 via-red-800 to-red-700 px-6 py-6 flex items-start justify-between border-b border-red-800 z-10 rounded-t-2xl">
+              <div className="flex-shrink-0 sticky top-0 bg-gradient-to-r from-red-900 via-red-800 to-red-700 px-6 py-6 flex items-start justify-between border-b border-red-800 z-10 w-full rounded-t-[1rem]">
                 <div className="flex items-start gap-3">
                   <div className="bg-white/20 p-2.5 rounded-lg">
                     <BarChart3 className="w-5 h-5 text-white" />
@@ -743,7 +743,7 @@ export function ReportGenerationModal({ isOpen, onClose }: { isOpen: boolean; on
               </div>
 
               {/* Footer */}
-              <div className="flex-shrink-0 bg-gray-50 px-6 py-4 border-t border-gray-200 flex gap-3 justify-end rounded-b-2xl">
+              <div className="flex-shrink-0 bg-gray-50 px-6 py-4 border-t border-gray-200 flex gap-3 justify-end w-full rounded-b-[1rem]">
                 <button
                   onClick={onClose}
                   disabled={generating}

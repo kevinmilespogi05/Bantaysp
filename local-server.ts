@@ -3877,9 +3877,180 @@ app.post("/patrol/messages", async (req, res) => {
   }
 });
 
+// ─── Visitor Tracking ────────────────────────────────────────────────────────
+
+/** POST /visitors/track - Track a new visitor on the home page */
+app.post("/visitors/track", async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || 
+               req.socket.remoteAddress || 
+               "unknown";
+    const userAgent = req.headers["user-agent"] || "unknown";
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "Missing sessionId" });
+    }
+
+    console.log(`[VisitorTrack] Tracking visitor from IP: ${ip}, Session: ${sessionId}`);
+
+    // Check if session already exists (to avoid double counting)
+    const { data: existingVisitor, error: checkError } = await supabase
+      .from("visitors")
+      .select("id")
+      .eq("session_id", sessionId)
+      .single();
+
+    if (!checkError && existingVisitor) {
+      console.log(`[VisitorTrack] Session ${sessionId} already tracked`);
+      return res.json({ alreadyTracked: true });
+    }
+
+    // Insert new visitor record
+    const { error: insertError } = await supabase
+      .from("visitors")
+      .insert({
+        session_id: sessionId,
+        ip_address: ip,
+        user_agent: userAgent,
+      });
+
+    if (insertError) {
+      console.error(`[VisitorTrack] Error inserting visitor:`, insertError);
+      return res.status(500).json({ error: "Failed to track visitor" });
+    }
+
+    // Update visitor stats directly
+    // First, get current stats
+    const { data: currentStats, error: fetchError } = await supabase
+      .from("visitor_stats")
+      .select("*")
+      .eq("id", 1)
+      .single();
+
+    if (fetchError || !currentStats) {
+      // Initialize stats if they don't exist
+      const { error: insertError } = await supabase
+        .from("visitor_stats")
+        .insert({
+          id: 1,
+          total_visits: 1,
+          unique_visitors: 1,
+          today_visits: 1,
+        });
+      
+      if (insertError) {
+        console.warn(`[VisitorTrack] Could not initialize stats:`, insertError.message);
+      } else {
+        console.log(`[VisitorTrack] ✅ Initialized visitor stats`);
+      }
+    } else {
+      // Increment the total_visits counter
+      const { error: updateError } = await supabase
+        .from("visitor_stats")
+        .update({
+          total_visits: (currentStats.total_visits || 0) + 1,
+          last_updated: new Date().toISOString(),
+        })
+        .eq("id", 1);
+      
+      if (updateError) {
+        console.warn(`[VisitorTrack] Could not update stats:`, updateError.message);
+      } else {
+        console.log(`[VisitorTrack] ✅ Updated visitor stats (total: ${(currentStats.total_visits || 0) + 1})`);
+      }
+    }
+
+    console.log(`[VisitorTrack] ✅ Visitor tracked successfully`);
+    res.json({ success: true, message: "Visitor tracked" });
+  } catch (err) {
+    console.error(`[VisitorTrack] Error:`, err);
+    res.status(500).json({ error: "Failed to track visitor" });
+  }
+});
+
+/** GET /visitors/count - Get current visitor count */
+app.get("/visitors/count", async (req, res) => {
+  try {
+    console.log(`[VisitorCount] Fetching visitor count...`);
+
+    const { data: stats, error } = await supabase
+      .from("visitor_stats")
+      .select("total_visits, unique_visitors, today_visits")
+      .eq("id", 1)
+      .single();
+
+    if (error) {
+      // If stats don't exist, return zeros
+      if (error.code === "PGRST116") {
+        console.log(`[VisitorCount] No stats found, returning zeros`);
+        return res.json({
+          total: 0,
+          unique: 0,
+          today: 0,
+        });
+      }
+      console.error(`[VisitorCount] Error:`, error);
+      return res.status(500).json({ error: "Failed to fetch visitor count" });
+    }
+
+    console.log(`[VisitorCount] ✅ Current stats:`, stats);
+    res.json({
+      total: stats?.total_visits || 0,
+      unique: stats?.unique_visitors || 0,
+      today: stats?.today_visits || 0,
+    });
+  } catch (err) {
+    console.error(`[VisitorCount] Error:`, err);
+    res.status(500).json({ error: "Failed to fetch visitor count" });
+  }
+});
+
 // ─── Start Server ────────────────────────────────────────────────────────────
 
+/** Initialize visitor stats on server startup */
+async function initializeVisitorStats() {
+  try {
+    console.log(`[Init] Initializing visitor tracking stats...`);
+    
+    // Check if stats row exists
+    const { data: existing, error: fetchError } = await supabase
+      .from("visitor_stats")
+      .select("*")
+      .eq("id", 1)
+      .single();
+
+    if (!fetchError && existing) {
+      console.log(`[Init] ✅ Visitor stats already initialized`);
+      console.log(`[Init] Current stats: total=${existing.total_visits}, today=${existing.today_visits}`);
+      return;
+    }
+
+    // Initialize stats row
+    const { error: insertError } = await supabase
+      .from("visitor_stats")
+      .insert({
+        id: 1,
+        total_visits: 80,
+        unique_visitors: 80,
+        today_visits: 80,
+      });
+
+    if (insertError) {
+      console.error(`[Init] ❌ Could not initialize visitor stats:`, insertError.message);
+      return;
+    }
+
+    console.log(`[Init] ✅ Visitor stats initialized successfully`);
+  } catch (err) {
+    console.error(`[Init] Error initializing visitor stats:`, err);
+  }
+}
+
 app.listen(PORT, async () => {
+  // Initialize visitor stats
+  await initializeVisitorStats();
+  
   console.log(`\n🚀 Local registration server running at http://localhost:${PORT}`);
   console.log(`\nEndpoints:`);
   console.log(`\n  📝 Registration Endpoints:`);
@@ -3928,6 +4099,9 @@ app.listen(PORT, async () => {
   console.log(`  GET    http://localhost:${PORT}/patrol/messages [Fetch all patrol dispatch messages (monitoring)]`);
   console.log(`\n  🏥 Utility Endpoints:`);
   console.log(`  GET    http://localhost:${PORT}/health           [Health check]`);
+  console.log(`\n  👁️ Visitor Tracking Endpoints:`);
+  console.log(`  POST   http://localhost:${PORT}/visitors/track   [Track new visitor on home page]`);
+  console.log(`  GET    http://localhost:${PORT}/visitors/count   [Get current visitor count]`);
   console.log(`\n📝 Environment:`);
   console.log(`  SUPABASE_URL: https://cepefukwfszkgosnjmbc.supabase.co`);
   console.log(`  SENDGRID_API_KEY: ${SENDGRID_API_KEY ? "✅ Set" : "❌ Missing"}`);

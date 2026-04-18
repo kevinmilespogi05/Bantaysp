@@ -17,14 +17,15 @@ import {
   Lock,
 } from "lucide-react";
 import { BantayLogo } from "../components/ui/BantayLogo";
+import { trackVisitor, fetchVisitorCount, generateSessionId, fetchDashboardStats } from "../services/api";
 
 const HERO_BG = "https://images.unsplash.com/photo-1771905603448-14e6c48f7665?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1920";
 
-const stats = [
-  { label: "Reports Filed", value: "2,847", icon: FileText, color: "#800000", live: true },
-  { label: "Issues Resolved", value: "2,391", icon: CheckCircle, color: "#16a34a", live: false },
-  { label: "Active Citizens", value: "1,203", icon: Users, color: "#2563eb", live: true },
-  { label: "Response Rate", value: "84%", icon: Zap, color: "#d97706", live: false },
+const staticStats = [
+  { label: "Reports Filed", value: "0", icon: FileText, color: "#800000", live: true },
+  { label: "Issues Resolved", value: "0", icon: CheckCircle, color: "#16a34a", live: false },
+  { label: "LIVE", value: "0", icon: Zap, color: "#dc2626", live: true },
+  { label: "Response Rate", value: "0%", icon: Trophy, color: "#d97706", live: false },
 ];
 
 const features = [
@@ -81,11 +82,96 @@ const testimonials = [
 export function LandingPage() {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
+  const [visitorCount, setVisitorCount] = useState(0);
+  const [stats, setStats] = useState(staticStats);
+  const [activeReporters, setActiveReporters] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Fetch dashboard stats and visitor data on mount
+  useEffect(() => {
+    const fetchAllStats = async () => {
+      try {
+        // Fetch dashboard stats
+        const dashboardResponse = await fetchDashboardStats();
+        // Fetch visitor count
+        const visitorResponse = await fetchVisitorCount();
+
+        if (dashboardResponse.data && visitorResponse.data) {
+          const dashboard = dashboardResponse.data;
+          const visitors = visitorResponse.data;
+
+          setVisitorCount(visitors.total);
+          setActiveReporters(dashboard.activeCitizens);
+
+          // Update all stats from real data
+          setStats([
+            {
+              label: "Reports Filed",
+              value: dashboard.totalReports.toLocaleString(),
+              icon: FileText,
+              color: "#800000",
+              live: true,
+            },
+            {
+              label: "Issues Resolved",
+              value: dashboard.resolved.toLocaleString(),
+              icon: CheckCircle,
+              color: "#16a34a",
+              live: false,
+            },
+            {
+              label: "LIVE",
+              value: dashboard.inProgress.toLocaleString(),
+              icon: Zap,
+              color: "#dc2626",
+              live: true,
+            },
+            {
+              label: "Response Rate",
+              value: `${dashboard.responseRate}%`,
+              icon: Trophy,
+              color: "#d97706",
+              live: false,
+            },
+          ]);
+        }
+      } catch (err) {
+        console.error("❌ Error fetching stats:", err);
+      }
+    };
+
+    fetchAllStats();
+
+    // Refetch every 15 seconds to update live data
+    const interval = setInterval(fetchAllStats, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Track visitor on mount
+  useEffect(() => {
+    const initializeVisitorTracking = async () => {
+      try {
+        // Generate or retrieve session ID from localStorage
+        let sessionId = localStorage.getItem("visitor_session_id");
+        if (!sessionId) {
+          sessionId = generateSessionId();
+          localStorage.setItem("visitor_session_id", sessionId);
+        }
+
+        // Track this visitor
+        await trackVisitor(sessionId);
+        console.log("✅ Visitor tracked:", sessionId);
+      } catch (err) {
+        console.error("❌ Visitor tracking error:", err);
+      }
+    };
+
+    initializeVisitorTracking();
   }, []);
 
   return (
@@ -271,7 +357,7 @@ export function LandingPage() {
               className="absolute -right-8 bottom-24 bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-xl"
             >
               <div className="text-gray-500 mb-1" style={{ fontSize: "10px" }}>Active Reporters</div>
-              <div className="font-bold text-gray-900">1,203</div>
+              <div className="font-bold text-gray-900">{activeReporters.toLocaleString()}</div>
               <div className="flex -space-x-1 mt-1">
                 {["JD", "MS", "AG", "RR"].map((a) => (
                   <div key={a} className="w-5 h-5 rounded-full border border-white flex items-center justify-center text-white" style={{ fontSize: "7px", backgroundColor: "#800000" }}>{a[0]}</div>
@@ -496,6 +582,93 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* About Section */}
+      <section id="about" className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-14"
+          >
+            <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-4 text-sm font-medium" style={{ backgroundColor: "#80000015", color: "#800000" }}>
+              <Star className="w-4 h-4" /> About Bantay SP
+            </div>
+            <h2 className="text-gray-900 mb-3" style={{ fontSize: "clamp(1.8rem, 3vw, 2.5rem)", fontWeight: 700 }}>
+              Empowering Community Safety Through Transparency
+            </h2>
+            <p className="text-gray-500 max-w-3xl mx-auto" style={{ lineHeight: 1.7 }}>
+              Bantay SP is a community-driven safety platform designed to strengthen the connection between residents, barangay officials, and patrol units.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0 }}
+              className="bg-gradient-to-br from-red-50 to-red-100/50 rounded-2xl p-6 border border-red-200/50"
+            >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white mb-4 shadow-sm">
+                <FileText className="w-6 h-6" style={{ color: "#800000" }} />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2 text-lg">Report with Purpose</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Submit verified reports with photos and exact locations. Every report matters in keeping our communities safe and improving public services.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl p-6 border border-blue-200/50"
+            >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white mb-4 shadow-sm">
+                <MapPin className="w-6 h-6" style={{ color: "#2563eb" }} />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2 text-lg">Track in Real-Time</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                View all community reports on an interactive map. Monitor incident status, response times, and see how your community is responding to challenges.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.2 }}
+              className="bg-gradient-to-br from-green-50 to-green-100/50 rounded-2xl p-6 border border-green-200/50"
+            >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white mb-4 shadow-sm">
+                <Trophy className="w-6 h-6" style={{ color: "#16a34a" }} />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2 text-lg">Earn Civic Points</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Contribute to your community and earn civic points. Recognize top reporters on our leaderboard and inspire others to get involved.
+              </p>
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-16 bg-gradient-to-r from-red-50 to-red-100/50 rounded-2xl p-8 border border-red-200/30"
+          >
+            <h3 className="font-semibold text-gray-900 mb-4 text-lg">Our Mission</h3>
+            <p className="text-gray-600 leading-relaxed mb-4">
+              Bantay SP (Bantay - Sentinel + SP - San Pablo) creates a bridge between residents and authorities. We believe that when communities have the right tools and transparency, they become safer, more responsive, and more empowered. Every report, every update, and every verified citizen strengthens the safety network.
+            </p>
+            <p className="text-gray-600 leading-relaxed">
+              By combining technology with community trust, Bantay SP enables real-time incident tracking, rapid response coordination, and civic engagement that makes a measurable difference in our neighborhoods.
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-10 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -516,6 +689,56 @@ export function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Floating Visitor Counter */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.5, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ delay: 0.5, duration: 0.6 }}
+        className="fixed bottom-6 right-6 z-50"
+      >
+        <motion.div
+          animate={{ y: [0, -8, 0] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          className="bg-white/95 backdrop-blur-md rounded-full p-4 shadow-2xl border border-white/20 cursor-pointer hover:shadow-3xl transition-all group"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
+          <div className="flex items-center gap-3 px-2">
+            {/* Counter Circle */}
+            <div className="relative w-10 h-10 flex items-center justify-center">
+              <motion.div
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute inset-0 rounded-full"
+                style={{ backgroundColor: "#800000", opacity: 0.2 }}
+              />
+              <div className="absolute inset-1 rounded-full" style={{ backgroundColor: "#800000", opacity: 0.4 }} />
+              <Eye className="w-5 h-5" style={{ color: "#800000" }} />
+            </div>
+
+            {/* Text */}
+            <div className="flex flex-col gap-0">
+              <div className="text-xs font-bold text-gray-600">
+                Total Visitors
+              </div>
+              <div className="text-lg font-bold" style={{ color: "#800000" }}>
+                {visitorCount.toLocaleString()}
+              </div>
+            </div>
+
+            {/* All-Time Badge */}
+            <div className="flex items-center gap-1.5 bg-orange-100 rounded-full px-2.5 py-1 ml-1">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#d97706" }} />
+              <span className="text-xs font-semibold" style={{ color: "#d97706" }}>ALL-TIME</span>
+            </div>
+          </div>
+
+          {/* Hover Tooltip */}
+          <div className="absolute bottom-full right-0 mb-2 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            Total site visitors
+          </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

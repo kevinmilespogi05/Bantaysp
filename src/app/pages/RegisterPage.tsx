@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin, AlertCircle, Loader } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin, AlertCircle, Loader, FileText } from "lucide-react";
 import { BantayLogo } from "../components/ui/BantayLogo";
 import { VerificationNotification } from "../components/ui/VerificationNotification";
 import { registerUser, verifyOtp, generateOtp, uploadToCloudinary } from "../services/api";
@@ -27,6 +27,10 @@ export function RegisterPage() {
   const [otpResent, setOtpResent] = useState(false);
   const [showVerificationNotification, setShowVerificationNotification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -61,6 +65,11 @@ export function RegisterPage() {
 
       if (form.password.length < 6) {
         setError("Password must be at least 6 characters");
+        return;
+      }
+
+      if (!acceptedTerms || !acceptedPrivacy) {
+        setError("You must accept the Terms of Service and Privacy Policy to continue");
         return;
       }
 
@@ -435,6 +444,41 @@ export function RegisterPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Terms & Privacy Checkboxes */}
+                <div className="mt-6 space-y-3 pt-6 border-t border-gray-200">
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={acceptedTerms && acceptedPrivacy}
+                      onChange={(e) => {
+                        setAcceptedTerms(e.target.checked);
+                        setAcceptedPrivacy(e.target.checked);
+                      }}
+                      className="mt-1 w-4 h-4 accent-red-700 cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-600">
+                      I agree to the{" "}
+                      <button
+                        type="button"
+                        onClick={() => setShowTermsModal(true)}
+                        className="font-semibold hover:underline"
+                        style={{ color: "#800000" }}
+                      >
+                        Terms of Service
+                      </button>
+                      {" "}and{" "}
+                      <button
+                        type="button"
+                        onClick={() => setShowPrivacyModal(true)}
+                        className="font-semibold hover:underline"
+                        style={{ color: "#800000" }}
+                      >
+                        Privacy Policy
+                      </button>
+                    </span>
+                  </label>
+                </div>
               </motion.div>
             )}
 
@@ -669,6 +713,176 @@ export function RegisterPage() {
               navigate("/", { replace: true });
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Terms of Service Modal */}
+      <AnimatePresence>
+        {showTermsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowTermsModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            >
+              <div className="p-6 border-b border-gray-200 sticky top-0 bg-white">
+                <div className="flex items-center gap-3 mb-2">
+                  <FileText className="w-5 h-5" style={{ color: "#800000" }} />
+                  <h3 className="text-xl font-bold text-gray-900">Terms of Service</h3>
+                </div>
+                <p className="text-sm text-gray-500">Last updated: April 2026</p>
+              </div>
+
+              <div className="p-6 space-y-4 text-sm text-gray-700">
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">1. Acceptance of Terms</h4>
+                  <p>By using Bantay SP, you agree to comply with these Terms of Service. If you do not agree, please do not use the platform.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">2. User Responsibilities</h4>
+                  <p>Users must provide accurate information during registration. You are responsible for maintaining the confidentiality of your account credentials. All activities under your account are your responsibility.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">3. Community Guidelines</h4>
+                  <p>Reports must be truthful and submitted in good faith. Users must not submit false, defamatory, or misleading reports. Harassment, hate speech, or illegal content is strictly prohibited.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">4. ID Verification</h4>
+                  <p>Users must provide valid government-issued identification for account verification. Bantay SP reserves the right to deny service to users who fail verification or provide false information.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">5. Limitation of Liability</h4>
+                  <p>Bantay SP is provided on an "as-is" basis. We do not guarantee the accuracy, completeness, or timeliness of reports. Users use the platform at their own risk.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">6. Termination</h4>
+                  <p>Bantay SP reserves the right to suspend or terminate accounts that violate these terms or our community guidelines.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">7. Changes to Terms</h4>
+                  <p>We may update these terms at any time. Continued use of Bantay SP constitutes acceptance of updated terms.</p>
+                </section>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 bg-gray-50 flex gap-3">
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-medium hover:bg-gray-100 transition-all"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setAcceptedTerms(true);
+                    setShowTermsModal(false);
+                  }}
+                  className="flex-1 px-4 py-2 rounded-lg text-white font-medium transition-all"
+                  style={{ backgroundColor: "#800000" }}
+                >
+                  Accept & Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Privacy Policy Modal */}
+      <AnimatePresence>
+        {showPrivacyModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowPrivacyModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            >
+              <div className="p-6 border-b border-gray-200 sticky top-0 bg-white">
+                <div className="flex items-center gap-3 mb-2">
+                  <FileText className="w-5 h-5" style={{ color: "#800000" }} />
+                  <h3 className="text-xl font-bold text-gray-900">Privacy Policy</h3>
+                </div>
+                <p className="text-sm text-gray-500">Last updated: April 2026</p>
+              </div>
+
+              <div className="p-6 space-y-4 text-sm text-gray-700">
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">1. Information We Collect</h4>
+                  <p>We collect personal information including name, email, phone number, government ID, location, and report details. We also collect IP addresses and device information for security purposes.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">2. How We Use Your Information</h4>
+                  <p>Your information is used to verify your identity, process reports, improve our services, and communicate with you about your account. We do not sell your personal data to third parties.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">3. Data Security</h4>
+                  <p>We implement industry-standard security measures to protect your information. However, no system is completely secure. Users are responsible for protecting their account credentials.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">4. Report Visibility</h4>
+                  <p>Community reports may be visible to authorized personnel (admin, patrol, barangay officials) to facilitate response and resolution. Anonymous reports are handled separately with reduced visibility.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">5. Cookies and Tracking</h4>
+                  <p>Bantay SP uses cookies and analytics to understand usage patterns and improve user experience. You can control cookie settings in your browser.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">6. Your Rights</h4>
+                  <p>You have the right to access, update, or delete your personal information. Contact us for assistance with data requests or privacy concerns.</p>
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-gray-900 mb-2">7. Contact Us</h4>
+                  <p>For privacy inquiries, please contact: privacy@bantaysp.gov.ph</p>
+                </section>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 bg-gray-50 flex gap-3">
+                <button
+                  onClick={() => setShowPrivacyModal(false)}
+                  className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-medium hover:bg-gray-100 transition-all"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setAcceptedPrivacy(true);
+                    setShowPrivacyModal(false);
+                  }}
+                  className="flex-1 px-4 py-2 rounded-lg text-white font-medium transition-all"
+                  style={{ backgroundColor: "#800000" }}
+                >
+                  Accept & Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
