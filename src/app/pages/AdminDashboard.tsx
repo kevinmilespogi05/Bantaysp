@@ -46,6 +46,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { BantayLogo } from "../components/ui/BantayLogo";
 import { UsersTab } from "../components/admin/UsersTab";
+import { ReportGenerationModal } from "../components/admin/ReportGenerationModal";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
@@ -107,6 +108,7 @@ export function AdminDashboard() {
 
   const [togglingAnonymityReportId, setTogglingAnonymityReportId] = useState<string | null>(null);
   const [optimisticAnonymousToggles, setOptimisticAnonymousToggles] = useState<Record<string, boolean>>({});
+  const [reportGenerationModalOpen, setReportGenerationModalOpen] = useState(false);
 
   const activeTab = (searchParams.get("tab") ?? "overview") as AdminTab;
   console.log("[AdminDashboard] activeTab:", activeTab, "| users tab active?", activeTab === "users");
@@ -385,7 +387,9 @@ export function AdminDashboard() {
         {/* Export & Settings — admin only */}
         {isAdmin && (
           <div className="md:ml-auto flex gap-2">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-600 text-sm hover:bg-gray-50 transition-all">
+            <button 
+              onClick={() => setReportGenerationModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-600 text-sm hover:bg-gray-50 transition-all">
               <Download className="w-4 h-4" /> Export
             </button>
             <button
@@ -1560,6 +1564,12 @@ export function AdminDashboard() {
           setConfirmAction(null);
         }}
         isLoading={processingUserId !== null}
+      />
+
+      {/* Report Generation Modal */}
+      <ReportGenerationModal 
+        isOpen={reportGenerationModalOpen} 
+        onClose={() => setReportGenerationModalOpen(false)} 
       />
 
     </div>

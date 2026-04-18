@@ -809,14 +809,13 @@ app.get("/dashboard/stats", async (req, res) => {
 
 app.get("/reports", async (req, res) => {
   try {
-    console.log(`[Reports] Fetching approved reports...`);
+    console.log(`[Reports] Fetching reports...`);
 
     const { data: reports, error } = await supabase
       .from("reports")
-      .select("*, is_anonymous")
-      .in("status", ["approved", "accepted", "submitted", "in_progress", "resolved"])
+      .select("id, title, category, status, location, timestamp, created_at, reporter, avatar, description, image_url, verified, comments, upvotes, is_anonymous, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, resolved_by, resolved_at, admin_notes, user_id")
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(500);
 
     if (error) throw error;
 
@@ -1790,7 +1789,7 @@ app.get("/admin/stats", async (req, res) => {
       .select("status");
 
     const reports = allReports || [];
-    const pending = reports.filter((r: any) => r.status === "pending").length;
+    const pending = reports.filter((r: any) => r.status === "pending_verification").length;
     const inProgress = reports.filter((r: any) => r.status === "in_progress").length;
     const resolved = reports.filter((r: any) => r.status === "resolved").length;
 

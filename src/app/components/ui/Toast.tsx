@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Check, AlertCircle, Info, X, AlertTriangle } from "lucide-react";
 import { useEffect } from "react";
 
-export type ToastType = "success" | "error" | "info" | "warning";
+export type ToastType = "success" | "error" | "info" | "warning" | "loading";
 
 export interface ToastMessage {
   id: string;
@@ -44,6 +44,13 @@ const toastConfig = {
     border: "border-blue-200",
     text: "text-blue-800",
     iconColor: "text-blue-600",
+  },
+  loading: {
+    icon: Info,
+    bg: "bg-gray-50",
+    border: "border-gray-200",
+    text: "text-gray-800",
+    iconColor: "text-gray-600",
   },
 };
 

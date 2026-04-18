@@ -20,11 +20,12 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
-    /* Path aliases â€” must match vite.config.ts resolve.alias */
+    /* Path aliases — must match vite.config.ts resolve.alias */
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src", "utils"],
   "references": [{ "path": "./tsconfig.node.json" }]
