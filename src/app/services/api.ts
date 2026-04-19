@@ -153,6 +153,8 @@ export interface Report {
   resolved_by?: string;
   resolved_at?: string;
   admin_notes?: string;
+  resolution_notes?: string;
+  resolution_evidence_url?: string;
 }
 
 export interface Announcement {

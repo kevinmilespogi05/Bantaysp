@@ -440,6 +440,38 @@ export function ReportsPage() {
                     <p className="text-gray-600 text-sm leading-relaxed">{selectedReport.description}</p>
                   </div>
 
+                  {/* Patrol Resolution Evidence */}
+                  {(selectedReport.resolution_evidence_url || selectedReport.resolution_notes) && (
+                    <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4 mb-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                        <h3 className="font-semibold text-green-900 text-sm">How It Was Fixed</h3>
+                      </div>
+
+                      {selectedReport.resolution_evidence_url && (
+                        <div className="mb-4">
+                          <p className="text-green-700 text-xs font-medium mb-2">Resolution Evidence</p>
+                          <div className="bg-white rounded-lg overflow-hidden border border-green-200">
+                            <img
+                              src={selectedReport.resolution_evidence_url}
+                              alt="Resolution Evidence"
+                              className="w-full max-h-72 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedReport.resolution_notes && (
+                        <div>
+                          <p className="text-green-700 text-xs font-medium mb-2">Patrol Officer's Resolution Notes</p>
+                          <div className="bg-white rounded-lg p-3 border border-green-200 text-green-900 text-sm leading-relaxed">
+                            {selectedReport.resolution_notes}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div className="flex gap-3 mb-5">
                     <button

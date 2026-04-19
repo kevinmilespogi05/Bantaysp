@@ -812,7 +812,7 @@ app.get("/reports", async (req, res) => {
 
     const { data: reports, error } = await supabase
       .from("reports")
-      .select("id, title, category, status, location, timestamp, created_at, reporter, avatar, description, image_url, verified, comments, upvotes, is_anonymous, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, resolved_by, resolved_at, admin_notes, user_id")
+      .select("id, title, category, status, location, timestamp, created_at, reporter, avatar, description, image_url, verified, comments, upvotes, is_anonymous, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, resolved_by, resolved_at, admin_notes, user_id, resolution_notes, resolution_evidence_url")
       .order("created_at", { ascending: false })
       .limit(500);
 
