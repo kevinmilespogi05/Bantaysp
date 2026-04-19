@@ -31,18 +31,6 @@ const STATUS_LABEL: Record<string, string> = {
   busy: "Busy",
   offline: "Offline",
 };
-const PRIORITY_COLOR: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#ef4444",
-  medium: "#f59e0b",
-  low: "#22c55e",
-};
-const PRIORITY_BG: Record<string, string> = {
-  critical: "rgba(220,38,38,0.15)",
-  high: "rgba(239,68,68,0.12)",
-  medium: "rgba(245,158,11,0.12)",
-  low: "rgba(34,197,94,0.12)",
-};
 
 function timeAgo(iso: string) {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -107,7 +95,7 @@ function patrolIcon(unit: PatrolUnitData, selected: boolean) {
 }
 
 function incidentIcon(inc: IncidentLocation, selected: boolean) {
-  const c = PRIORITY_COLOR[inc.priority];
+  const c = "#ef4444";
   const sz = selected ? 34 : 28;
   const pulse = `<div style="position:absolute;inset:0;border-radius:50%;background:${c};opacity:0.3;animation:leaflet-ping 1.8s ease-in-out infinite;"></div>`;
   return L.divIcon({
@@ -173,6 +161,8 @@ export function AdminPatrolMonitoring() {
   const [mapZoom] = useState(14);
   const [tileStyle, setTileStyle] = useState<"dark" | "light">("dark");
   const [assigningFor, setAssigningFor] = useState<string | null>(null);
+  const [selectedPatrolForAssignment, setSelectedPatrolForAssignment] = useState<string | null>(null);
+  const [showConfirmAssignment, setShowConfirmAssignment] = useState(false);
   const [msgTarget, setMsgTarget] = useState<"broadcast" | string>("broadcast");
   const [newMsg, setNewMsg] = useState("");
   const [tick, setTick] = useState(0);
@@ -260,39 +250,69 @@ export function AdminPatrolMonitoring() {
     else setAssigningFor(null);
   };
 
-  // Assign patrol to incident — persists to Supabase via server
-  const assignPatrol = async (incidentId: string, patrolId: string) => {
-    const inc = incidents.find((i) => i.id === incidentId);
-    const unit = units.find((u) => u.id === patrolId);
+  // Confirm and assign patrol to incident
+  const confirmAssignPatrol = async () => {
+    if (!assigningFor || !selectedPatrolForAssignment) {
+      console.error("[confirmAssignPatrol] Missing incidentId or patrolId");
+      return;
+    }
 
-    // Optimistic update
+    const inc = incidents.find((i) => i.id === assigningFor) || reports.find((r) => r.id === assigningFor);
+    const unit = units.find((u) => u.id === selectedPatrolForAssignment);
+
+    if (!inc || !unit) {
+      console.error("[confirmAssignPatrol] Incident or unit not found");
+      return;
+    }
+
+    // Optimistic update - update both incidents and reports
     setIncidents((prev) =>
-      prev.map((i) => i.id === incidentId ? { ...i, assignedPatrol: patrolId, status: "assigned" as const } : i)
+      prev.map((i) => i.id === assigningFor ? { ...i, assignedPatrol: selectedPatrolForAssignment, status: "assigned" as const } : i)
+    );
+    setReports((prev) =>
+      prev.map((r) => r.id === assigningFor ? { ...r, assignedPatrol: selectedPatrolForAssignment, status: "in_progress" as const } : r)
     );
     setUnits((prev) =>
-      prev.map((u) => u.id === patrolId
-        ? { ...u, status: "en_route" as const, currentCase: incidentId, currentCaseTitle: inc?.title || null }
+      prev.map((u) => u.id === selectedPatrolForAssignment
+        ? { ...u, status: "en_route" as const, currentCase: assigningFor, currentCaseTitle: inc?.title || null }
         : u)
     );
 
     // Persist to server
     await Promise.all([
-      updatePatrolIncident(incidentId, { assignedPatrol: patrolId, status: "assigned" } as any),
-      updatePatrolUnit(patrolId, { status: "en_route", currentCase: incidentId, currentCaseTitle: inc?.title || null } as any),
+      updatePatrolIncident(assigningFor, { assignedPatrol: selectedPatrolForAssignment, status: "assigned" } as any),
+      updatePatrolUnit(selectedPatrolForAssignment, { status: "en_route", currentCase: assigningFor, currentCaseTitle: inc?.title || null } as any),
     ]);
 
     // Send dispatch message
-    if (unit && inc) {
-      const { data: sent } = await sendPatrolMessage({
-        from: "admin", to: patrolId,
-        message: `Dispatch: Assigned to case – ${inc.title}. Proceed immediately.`,
-      });
-      if (sent) setMessages((prev) => [...prev, sent]);
-    }
+    const { data: sent } = await sendPatrolMessage({
+      from: "admin", to: selectedPatrolForAssignment,
+      message: `Dispatch: Assigned to case – ${inc.title}. Proceed immediately.`,
+    });
+    if (sent) setMessages((prev) => [...prev, sent]);
 
+    // Reset states
     setAssigningFor(null);
+    setSelectedPatrolForAssignment(null);
+    setShowConfirmAssignment(false);
     setSelectedIncident(null);
     setShowAssignModal(false);
+  };
+
+  // Assign patrol to incident — persists to Supabase via server
+  const assignPatrol = async (incidentId: string, patrolId: string) => {
+    const inc = incidents.find((i) => i.id === incidentId) || reports.find((r) => r.id === incidentId);
+    const unit = units.find((u) => u.id === patrolId);
+
+    if (!inc) {
+      console.error("[assignPatrol] Incident not found:", incidentId);
+      return;
+    }
+
+    // Show confirmation modal instead of directly assigning
+    setAssigningFor(incidentId);
+    setSelectedPatrolForAssignment(patrolId);
+    setShowConfirmAssignment(true);
   };
 
   // Broadcast / direct message — persists to server
@@ -323,15 +343,28 @@ export function AdminPatrolMonitoring() {
     totalCases: incidents.length,
   };
 
-  // Nearest available patrols for an incident
+  // Nearest available patrols for an incident or report (only unassigned patrols)
   const nearbyAvailable = (incidentId: string) => {
     const inc = incidents.find((i) => i.id === incidentId);
-    if (!inc) return [];
+    const rep = reports.find((r) => r.id === incidentId);
+    
+    // Get location from either incident or report
+    let lat: number, lng: number;
+    if (inc) {
+      lat = inc.location.lat;
+      lng = inc.location.lng;
+    } else if (rep) {
+      lat = rep.location_lat || 15.0648;
+      lng = rep.location_lng || 120.1982;
+    } else {
+      return [];
+    }
+    
     return units
-      .filter((u) => u.status === "available" || u.status === "en_route")
+      .filter((u) => (u.status === "available" || u.status === "en_route") && !u.currentCase)
       .map((u) => ({
         ...u,
-        distKm: haversineKm(u.location.lat, u.location.lng, inc.location.lat, inc.location.lng),
+        distKm: haversineKm(u.location.lat, u.location.lng, lat, lng),
       }))
       .sort((a, b) => a.distKm - b.distKm);
   };
@@ -453,10 +486,6 @@ export function AdminPatrolMonitoring() {
                   style={{ background: "#0f1117", border: "1px solid rgba(255,255,255,0.1)" }}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
-                    <div className="w-2 h-2 rounded-full" style={{ background: PRIORITY_COLOR[inc.priority] }} />
-                    <span style={{ color: PRIORITY_COLOR[inc.priority], fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>
-                      {inc.priority}
-                    </span>
                     <span className="text-gray-500 ml-auto" style={{ fontSize: 10 }}>{formatTime(inc.timeReported)}</span>
                   </div>
                   <div className="text-white font-semibold mb-1" style={{ fontSize: 12 }}>{inc.title}</div>
@@ -480,24 +509,6 @@ export function AdminPatrolMonitoring() {
               </Popup>
             </Marker>
           ))}
-
-          {/* Range circles for critical/high incidents — must be siblings of Marker, not children */}
-          {incidents
-            .filter((inc) => inc.priority === "critical" || inc.priority === "high")
-            .map((inc) => (
-              <Circle
-                key={`zone-${inc.id}`}
-                center={[inc.location.lat, inc.location.lng]}
-                radius={150}
-                pathOptions={{
-                  color: PRIORITY_COLOR[inc.priority],
-                  fillColor: PRIORITY_COLOR[inc.priority],
-                  fillOpacity: 0.06,
-                  weight: 1.5,
-                  dashArray: "4 4",
-                }}
-              />
-            ))}
 
           {/* Admin location marker */}
           {adminLocation && (
@@ -900,7 +911,57 @@ export function AdminPatrolMonitoring() {
 
           {/* CASES TAB */}
           {tab === "cases" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* ASSIGNMENT SECTION - Shows at TOP when a case is selected */}
+              {assigningFor && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl p-3"
+                  style={{ background: "rgba(128,0,0,0.2)", border: "2px solid rgba(128,0,0,0.5)" }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="w-4 h-4 text-orange-400" />
+                    <span className="text-white font-semibold text-sm">Assign Patrol to Case</span>
+                  </div>
+
+                  {/* Nearby available patrols */}
+                  <div className="space-y-1.5">
+                    {nearbyAvailable(assigningFor).length > 0 ? (
+                      nearbyAvailable(assigningFor).map((unit) => (
+                        <button
+                          key={unit.id}
+                          onClick={() => assignPatrol(assigningFor, unit.id)}
+                          className="w-full flex items-center gap-2 p-2.5 rounded-lg transition-all hover:bg-red-600/20 active:scale-95"
+                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: STATUS_COLOR[unit.status] }}>
+                            {unit.avatar}
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="text-white text-xs font-semibold">{unit.name}</div>
+                            <div className="text-gray-400 text-xs">{unit.distKm.toFixed(1)} km · {unit.unit}</div>
+                          </div>
+                          <div className="text-orange-400 text-xs font-semibold">ASSIGN</div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-center py-3">
+                        <p className="text-gray-400 text-xs">No available patrols nearby</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setAssigningFor(null)}
+                    className="w-full mt-2.5 py-1.5 rounded-lg text-gray-400 text-xs transition-all hover:text-gray-300 font-medium"
+                    style={{ background: "rgba(255,255,255,0.04)" }}
+                  >
+                    Cancel Assignment
+                  </button>
+                </motion.div>
+              )}
+
               {/* Display reports with status (excluding resolved) */}
               {reports.filter(r => r.status !== "resolved").length > 0 ? (
                 reports
@@ -922,10 +983,11 @@ export function AdminPatrolMonitoring() {
                         key={report.id}
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="rounded-xl overflow-hidden"
+                        onClick={() => setSelectedIncident(report.id)}
+                        className="rounded-xl overflow-hidden cursor-pointer transition-all"
                         style={{
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.06)",
+                          background: selectedIncident === report.id ? "rgba(128,0,0,0.25)" : "rgba(255,255,255,0.04)",
+                          border: selectedIncident === report.id ? "1px solid rgba(128,0,0,0.5)" : "1px solid rgba(255,255,255,0.06)",
                         }}
                       >
                         <div className="p-3">
@@ -972,6 +1034,17 @@ export function AdminPatrolMonitoring() {
                                   {timeAgo(report.timestamp)}
                                 </span>
                               </div>
+
+                              {/* Assign button when selected */}
+                              {selectedIncident === report.id && !report.assignedPatrol && report.status === "approved" && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setAssigningFor(report.id); }}
+                                  className="w-full mt-2 py-1.5 rounded-lg text-white transition-all hover:bg-red-600/40 text-xs font-semibold flex items-center justify-center gap-1"
+                                  style={{ background: "rgba(128,0,0,0.3)", border: "1px solid rgba(128,0,0,0.5)" }}
+                                >
+                                  <Zap className="w-3 h-3" /> Assign Patrol
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -984,6 +1057,8 @@ export function AdminPatrolMonitoring() {
                   <p className="text-gray-500 text-sm">No active cases. Check History for resolved reports.</p>
                 </div>
               )}
+
+              {/* REMOVED: Assignment section was moved to top of Cases tab */}
             </div>
           )}
 
@@ -1263,7 +1338,7 @@ export function AdminPatrolMonitoring() {
 
         {/* ── Bottom Quick Actions ── */}
         <div
-          className="px-3 py-3 grid grid-cols-2 gap-2 shrink-0"
+          className="px-3 py-3 grid grid-cols-1 gap-2 shrink-0"
           style={{ borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0f1117" }}
         >
           <button
@@ -1274,15 +1349,95 @@ export function AdminPatrolMonitoring() {
             <Volume2 className="w-3.5 h-3.5" />
             <span style={{ fontSize: 11, fontWeight: 600 }}>Broadcast</span>
           </button>
-          <button
-            onClick={() => { setTab("cases"); }}
-            className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all hover:opacity-90"
-            style={{ background: "rgba(128,0,0,0.25)", border: "1px solid rgba(128,0,0,0.5)", color: "#fca5a5" }}
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span style={{ fontSize: 11, fontWeight: 600 }}>Assign Patrol</span>
-          </button>
         </div>
+
+        {/* ── CONFIRMATION MODAL ── */}
+        <AnimatePresence>
+          {showConfirmAssignment && assigningFor && selectedPatrolForAssignment && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-[500]"
+              onClick={() => setShowConfirmAssignment(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-slate-900 rounded-2xl p-6 max-w-md w-full mx-4 border border-slate-700"
+              >
+                <div className="mb-4">
+                  <h3 className="text-white text-lg font-bold mb-1">Confirm Patrol Assignment</h3>
+                  <p className="text-gray-400 text-sm">Are you sure you want to assign this patrol to this case?</p>
+                </div>
+
+                {/* Case Details */}
+                <div className="bg-slate-800/50 rounded-lg p-3 mb-4 space-y-2">
+                  <div>
+                    <p className="text-gray-400 text-xs">CASE</p>
+                    <p className="text-white font-semibold text-sm">{reports.find((r) => r.id === assigningFor)?.title || "Loading..."}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-xs">LOCATION</p>
+                    <p className="text-gray-300 text-sm">{reports.find((r) => r.id === assigningFor)?.location || "Unknown"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-xs">CATEGORY</p>
+                    <p className="text-gray-300 text-sm">{reports.find((r) => r.id === assigningFor)?.category || "Unknown"}</p>
+                  </div>
+                </div>
+
+                {/* Patrol Details */}
+                <div className="bg-slate-800/50 rounded-lg p-3 mb-6 space-y-2">
+                  <div>
+                    <p className="text-gray-400 text-xs">ASSIGNED PATROL</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                        style={{ background: STATUS_COLOR[units.find((u) => u.id === selectedPatrolForAssignment)?.status || "available"] }}
+                      >
+                        {units.find((u) => u.id === selectedPatrolForAssignment)?.avatar}
+                      </div>
+                      <div>
+                        <p className="text-white font-semibold text-sm">{units.find((u) => u.id === selectedPatrolForAssignment)?.name || "Unknown"}</p>
+                        <p className="text-gray-400 text-xs">{units.find((u) => u.id === selectedPatrolForAssignment)?.unit} • {units.find((u) => u.id === selectedPatrolForAssignment)?.badgeNumber}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-xs">DISTANCE</p>
+                    <p className="text-gray-300 text-sm">
+                      {nearbyAvailable(assigningFor)
+                        .find((u) => u.id === selectedPatrolForAssignment)
+                        ?.distKm.toFixed(1) || "--"} km
+                    </p>
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowConfirmAssignment(false)}
+                    className="flex-1 py-2 rounded-lg text-gray-300 transition-all hover:bg-slate-700"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmAssignPatrol}
+                    className="flex-1 py-2 rounded-lg text-white font-semibold transition-all hover:bg-red-700 flex items-center justify-center gap-2"
+                    style={{ background: "#800000" }}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Confirm Assignment
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

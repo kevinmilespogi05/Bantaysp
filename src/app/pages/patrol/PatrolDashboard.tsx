@@ -13,13 +13,6 @@ import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataSt
 
 type CaseStatus = "assigned" | "accepted" | "in_progress" | "submitted" | "resolving" | "resolved";
 
-const priorityConfig = {
-  critical: { bg: "#7f1d1d", border: "#ef4444", badge: "bg-red-500", text: "CRITICAL", glow: "0 0 30px rgba(239,68,68,0.3)" },
-  high: { bg: "#7c2d12", border: "#f97316", badge: "bg-orange-500", text: "HIGH", glow: "0 0 30px rgba(249,115,22,0.25)" },
-  medium: { bg: "#713f12", border: "#eab308", badge: "bg-yellow-500", text: "MEDIUM", glow: "0 0 20px rgba(234,179,8,0.2)" },
-  low: { bg: "#14532d", border: "#22c55e", badge: "bg-green-500", text: "LOW", glow: "0 0 20px rgba(34,197,94,0.2)" },
-};
-
 const categoryColors: Record<string, string> = {
   "Suspicious Activity": "#ef4444",
   "Drug-Related": "#a855f7",
@@ -65,10 +58,6 @@ export function PatrolDashboard() {
   const { data: assignedReports, loading: assignedLoading } = useApi(fetchAssignedReports);
   const { data: patrolStats, loading: statsLoading } = useApi(fetchPatrolStats);
   const { data: patrolHistory, loading: historyLoading } = useApi(fetchPatrolHistory);
-
-  const pCfg = activeCase
-    ? priorityConfig[activeCase.priority as keyof typeof priorityConfig] ?? priorityConfig.medium
-    : priorityConfig.medium;
 
   // Attach stream to video element when camera becomes active
   useEffect(() => {
@@ -345,9 +334,8 @@ export function PatrolDashboard() {
               <div
                 className="rounded-2xl border-2 overflow-hidden relative"
                 style={{
-                  borderColor: pCfg.border,
-                  backgroundColor: pCfg.bg,
-                  boxShadow: pCfg.glow,
+                  borderColor: "#475569",
+                  backgroundColor: "#1e293b",
                 }}
               >
                 {/* Top Strip */}
@@ -357,9 +345,6 @@ export function PatrolDashboard() {
                     <span className="text-red-200 text-xs font-bold tracking-wider">ACTIVE CASE — {activeCase?.id}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-0.5 rounded-full text-white text-xs font-bold ${pCfg.badge}`}>
-                      {pCfg.text}
-                    </span>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70">
                       {activeCase?.category}
                     </span>
@@ -681,14 +666,14 @@ export function PatrolDashboard() {
           </div>
           <div className="divide-y divide-slate-700/30">
             {assignedReports?.slice(0, 3).map((r) => {
-              const pColor = r.priority === "high" ? "#ef4444" : r.priority === "medium" ? "#f59e0b" : "#22c55e";
+              const catColor = categoryColors[r.category] ?? "#6b7280";
               return (
                 <div
                   key={r.id}
                   onClick={() => navigate(`/app/patrol/case/${r.id}`)}
                   className="flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-slate-700/20 cursor-pointer transition-colors group"
                 >
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pColor }} />
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
                   <div className="flex-1 min-w-0">
                     <div className="text-slate-200 text-xs font-medium truncate">{r.title}</div>
                     <div className="flex items-center gap-1.5 mt-0.5">

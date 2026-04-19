@@ -32,7 +32,7 @@ const features = [
   {
     icon: FileText,
     title: "Incident Reporting",
-    description: "Submit community safety reports with photos, location, and priority level in seconds.",
+    description: "Submit community safety reports with photos and location in seconds.",
     color: "#800000",
   },
   {
@@ -69,7 +69,7 @@ const features = [
 
 const steps = [
   { step: "01", title: "Create an Account", desc: "Register with your valid government ID to become a verified community reporter.", color: "#800000" },
-  { step: "02", title: "File a Report", desc: "Document incidents with photos, precise location, and priority level using our easy form.", color: "#2563eb" },
+  { step: "02", title: "File a Report", desc: "Document incidents with photos and precise location using our easy form.", color: "#2563eb" },
   { step: "03", title: "Track & Engage", desc: "Follow the resolution status, comment, and earn civic points for your contributions.", color: "#16a34a" },
 ];
 

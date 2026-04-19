@@ -19,7 +19,6 @@ const REPORT_CONSTRAINTS = {
   description: { minLength: 10, maxLength: 2000 },
   category: { values: ["fire", "crime", "accident", "hazard", "other"] },
   status: { values: ["pending", "accepted", "in_progress", "resolved", "rejected"] },
-  priority: { values: ["low", "medium", "high", "urgent"] },
   location: { minLength: 5, maxLength: 200 },
 };
 
@@ -152,17 +151,6 @@ export function validateReport(report: unknown): ValidationResult {
         errors,
         "status",
         `Status must be one of: ${REPORT_CONSTRAINTS.status.values.join(", ")}`
-      );
-    }
-  }
-
-  // Validate priority (optional)
-  if (r.priority && typeof r.priority === "string") {
-    if (!REPORT_CONSTRAINTS.priority.values.includes(r.priority)) {
-      addError(
-        errors,
-        "priority",
-        `Priority must be one of: ${REPORT_CONSTRAINTS.priority.values.join(", ")}`
       );
     }
   }

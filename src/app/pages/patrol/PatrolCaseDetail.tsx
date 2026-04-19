@@ -11,13 +11,6 @@ import { useApi, fetchAssignedReports, fetchAvailableReports, fetchPatrolCase, a
 
 type CaseStatus = "pending" | "accepted" | "in_progress" | "submitted" | "resolving" | "resolved";
 
-const priorityConfig: Record<string, { color: string; bg: string; border: string; label: string; glow: string }> = {
-  critical: { color: "#ef4444", bg: "#7f1d1d", border: "#ef4444", label: "CRITICAL", glow: "0 0 24px rgba(239,68,68,0.25)" },
-  high: { color: "#f97316", bg: "#7c2d12", border: "#f97316", label: "HIGH", glow: "0 0 24px rgba(249,115,22,0.2)" },
-  medium: { color: "#eab308", bg: "#713f12", border: "#eab308", label: "MEDIUM", glow: "" },
-  low: { color: "#22c55e", bg: "#14532d", border: "#22c55e", label: "LOW", glow: "" },
-};
-
 function timeAgo(dateStr: string) {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 60000;
   if (diff < 60) return `${Math.floor(diff)} min ago`;
@@ -65,7 +58,6 @@ export function PatrolCaseDetail() {
   // Prioritize specific case data, fall back to lists if not found
   const report = specificCase ?? [...(assignedReports ?? []), ...(availableReports ?? [])].find((r) => r.id === id);
   const loading = caseLoading || assignedLoading || availableLoading;
-  const pCfg = priorityConfig[report?.priority ?? "medium"] ?? priorityConfig.medium;
 
   // Sync local status with actual report status from database
   useEffect(() => {
@@ -451,14 +443,14 @@ export function PatrolCaseDetail() {
       </div>
 
       <div className="p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4">
-        {/* ── Priority Strip ───────────────────────────── */}
+        {/* ── Case Header ───────────────────────────── */}
         <div
           className="rounded-2xl border-2 p-3 sm:p-4"
-          style={{ borderColor: pCfg.border, backgroundColor: pCfg.bg, boxShadow: pCfg.glow }}
+          style={{ borderColor: "#475569", backgroundColor: "#1e293b" }}
         >
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-red-300 shrink-0" />
-            <span className="text-red-200 text-xs font-bold">{report.category}</span>
+            <AlertTriangle className="w-4 h-4 text-slate-400 shrink-0" />
+            <span className="text-slate-400 text-xs font-bold">{report.category}</span>
           </div>
           <h2 className="text-white font-bold mb-3 text-sm sm:text-base">{report.title}</h2>
           <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-3">

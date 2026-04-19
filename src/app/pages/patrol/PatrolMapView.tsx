@@ -283,7 +283,6 @@ export function PatrolMapView() {
               className="rounded-xl p-3 min-w-[180px]"
               style={{ background: "#0f1117", border: "1px solid rgba(239,68,68,0.3)" }}
             >
-              <div className="text-red-400 font-bold mb-1" style={{ fontSize: 11 }}>🚨 {activeCase?.priority?.toUpperCase() ?? "Loading..."} INCIDENT</div>
               <div className="text-white font-semibold" style={{ fontSize: 12 }}>{activeCase?.title ?? "Loading..."}</div>
               <div className="text-gray-400 mt-1" style={{ fontSize: 10 }}>{activeCase?.location ?? ""}</div>
               <div className="text-blue-300 mt-1" style={{ fontSize: 10 }}>ETA: ~{activeCase?.eta ?? "Loading..."}</div>

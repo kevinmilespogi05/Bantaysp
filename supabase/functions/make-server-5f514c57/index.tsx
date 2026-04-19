@@ -70,7 +70,6 @@ app.post("/make-server-5f514c57/reports", async (c) => {
       title: body.title?.trim(),
       category: body.category,
       status: "pending",
-      priority: body.priority || "medium",
       location: body.location?.trim(),
       timestamp: new Date().toISOString(),
       reporter: body.reporter || "Anonymous",
@@ -518,7 +517,7 @@ app.get("/make-server-5f514c57/patrol/active-case", async (c) => {
     if (!active) return c.json(null);
     return c.json({
       id: active.id, title: active.title, category: active.category,
-      priority: active.priority, location: active.address, address: active.address,
+      location: active.address, address: active.address,
       distance: "250m", eta: "2 min", timeReported: active.timeReported,
       reporter: active.reporter || "Anonymous",
       reporterAvatar: active.reporterAvatar || "AN",
@@ -542,7 +541,7 @@ app.get("/make-server-5f514c57/patrol/assigned", async (c) => {
         .filter(i => i.status === "pending" || (i.assignedPatrol && i.assignedPatrol !== "PAT-001"))
         .map(i => ({
           id: i.id, title: i.title, category: i.category,
-          priority: i.priority, location: i.address || "Location N/A",
+          location: i.address || "Location N/A",
           distance: "N/A", timeReported: i.timeReported, status: i.status,
           reporter: i.reporter || "Anonymous",
           reporterAvatar: i.reporterAvatar || "AN",
@@ -586,7 +585,6 @@ app.post("/make-server-5f514c57/patrol/cases/:id/accept", async (c) => {
       id: incident.id,
       title: incident.title,
       category: incident.category,
-      priority: incident.priority,
       location: incident.address,
       address: incident.address,
       distance: "250m",

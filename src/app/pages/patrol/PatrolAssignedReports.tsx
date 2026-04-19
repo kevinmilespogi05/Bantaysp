@@ -19,15 +19,6 @@ import {
 
 type QueueTab = "assigned" | "available" | "submitted";
 
-const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-
-const priorityConfig: Record<string, { color: string; bg: string; label: string }> = {
-  critical: { color: "#ef4444", bg: "bg-red-500/15 text-red-400 border-red-500/30", label: "CRITICAL" },
-  high: { color: "#f97316", bg: "bg-orange-500/15 text-orange-400 border-orange-500/30", label: "HIGH" },
-  medium: { color: "#eab308", bg: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30", label: "MEDIUM" },
-  low: { color: "#22c55e", bg: "bg-green-500/15 text-green-400 border-green-500/30", label: "LOW" },
-};
-
 const categoryColors: Record<string, string> = {
   "Suspicious Activity": "#ef4444",
   "Drug-Related": "#a855f7",
@@ -49,7 +40,6 @@ interface ReportCard {
   id: string;
   title: string;
   category: string;
-  priority: "critical" | "high" | "medium" | "low";
   location: string;
   distance: string;
   timeReported: string;
@@ -65,7 +55,7 @@ export function PatrolAssignedReports() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<QueueTab>("assigned");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"distance" | "priority" | "time">("priority");
+  const [sortBy, setSortBy] = useState<"distance" | "time">("distance");
 
   // Fetch all three queues
   const { data: adminAssigned, loading: adminLoading } = useApi(() => 
@@ -92,16 +82,12 @@ export function PatrolAssignedReports() {
       r.location.toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
-      if (sortBy === "priority")
-        return (priorityOrder[a.priority as keyof typeof priorityOrder] ?? 9) -
-               (priorityOrder[b.priority as keyof typeof priorityOrder] ?? 9);
       if (sortBy === "distance")
         return parseFloat(a.distance) - parseFloat(b.distance);
       return new Date(b.timeReported).getTime() - new Date(a.timeReported).getTime();
     });
 
   const renderReportCard = (r: ReportCard, actionType: "admin" | "available" | "submitted") => {
-    const pCfg = priorityConfig[r.priority] ?? priorityConfig.medium;
     const catColor = categoryColors[r.category] ?? "#6b7280";
 
     return (
@@ -117,9 +103,6 @@ export function PatrolAssignedReports() {
           <div className="flex items-start justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${pCfg.bg}`}>
-                  {pCfg.label}
-                </span>
                 <span className="text-slate-500 text-xs">{r.id}</span>
               </div>
               <h3 className="text-white font-semibold text-sm leading-tight">{r.title}</h3>
@@ -261,7 +244,7 @@ export function PatrolAssignedReports() {
           />
         </div>
         <button
-          onClick={() => setSortBy(sortBy === "priority" ? "distance" : sortBy === "distance" ? "time" : "priority")}
+          onClick={() => setSortBy(sortBy === "distance" ? "time" : "distance")}
           className="flex items-center justify-center gap-1 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-white transition-colors text-xs"
           style={{ backgroundColor: "#161b22" }}
         >

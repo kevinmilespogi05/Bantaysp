@@ -83,7 +83,6 @@ interface PatrolIncident {
   id: string;
   title: string;
   category: string;
-  priority: string;
   location: { lat: number; lng: number };
   address: string;
   status: string;
@@ -2747,7 +2746,6 @@ app.get("/patrol/active-case", async (req, res) => {
         id: active.id,
         title: active.title,
         category: active.category,
-        priority: active.priority,
         location: active.address,
         address: active.address,
         distance: "250m",
@@ -2810,7 +2808,6 @@ app.get("/patrol/active-case", async (req, res) => {
       id: report.id,
       title: report.title,
       category: report.category || "General",
-      priority: "medium",
       location: report.location,
       address: report.location,
       distance: "250m",
@@ -2891,7 +2888,6 @@ app.get("/patrol/assigned", async (req, res) => {
           id: report.id,
           title: report.title,
           category: report.category,
-          priority: "medium",
           location: report.location,
           distance: "N/A",
           timeReported: report.timestamp,
@@ -2943,7 +2939,6 @@ app.get("/patrol/submitted", async (req, res) => {
       id: r.id,
       title: r.title,
       category: r.category,
-      priority: r.priority || "medium",
       location: r.location,
       distance: "N/A",
       timeReported: r.created_at,
@@ -3218,7 +3213,6 @@ app.get("/patrol/history", async (req, res) => {
       id: i.id,
       title: i.title,
       category: i.category,
-      priority: i.priority,
       status: "resolved",
       timeReported: i.timestamp,
       timeResolved: new Date().toISOString(),
@@ -3491,7 +3485,6 @@ app.get("/patrol/admin-assigned/:userId", async (req, res) => {
       title: r.title || "Untitled",
       description: r.description || "",
       status: r.status,
-      priority: r.priority || "medium",
       location: r.location || "Unknown",
       category: r.category || "General",
       timestamp: r.timestamp,
@@ -3549,7 +3542,6 @@ app.get("/patrol/available", async (req, res) => {
           title: r.title || "Untitled",
           description: r.description || "",
           status: r.status,
-          priority: "medium",
           location: r.location || "Unknown",
           category: r.category || "General",
           timestamp: r.timestamp,
@@ -3615,7 +3607,6 @@ app.get("/patrol/case/:id", async (req, res) => {
       title: report.title || "Untitled",
       description: report.description || "",
       status: report.status,
-      priority: "medium",
       location: report.location || "Unknown",
       category: report.category || "General",
       timestamp: report.timestamp,
@@ -3696,7 +3687,6 @@ app.get("/patrol/incidents", async (req, res) => {
       id: incident.id,
       title: incident.title,
       category: incident.category,
-      priority: incident.priority,
       location: { 
         lat: incident.location_lat || DEFAULT_LAT,
         lng: incident.location_lng || DEFAULT_LNG

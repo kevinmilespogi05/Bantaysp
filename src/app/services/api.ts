@@ -260,7 +260,6 @@ export interface IncidentPin {
   id: string;
   title: string;
   category: string;
-  priority: "critical" | "high" | "medium" | "low";
   location: { lat: number; lng: number };
   address: string;
   status: "pending" | "assigned" | "in_progress" | "resolved";
@@ -272,7 +271,6 @@ export interface PatrolActiveCase {
   id: string;
   title: string;
   category: string;
-  priority: "critical" | "high" | "medium" | "low";
   location: string;
   address: string;
   distance: string;
@@ -291,7 +289,6 @@ export interface PatrolCaseSummary {
   id: string;
   title: string;
   category: string;
-  priority: "critical" | "high" | "medium" | "low";
   location: string;
   distance: string;
   timeReported: string;
@@ -307,7 +304,6 @@ export interface PatrolHistoryEntry {
   id: string;
   title: string;
   category: string;
-  priority: string;
   location: string;
   timeResolved: string;
   timeReported: string;

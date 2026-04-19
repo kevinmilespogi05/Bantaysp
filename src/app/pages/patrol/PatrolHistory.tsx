@@ -9,13 +9,6 @@ import {
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const priorityConfig: Record<string, { color: string; label: string }> = {
-  critical: { color: "#ef4444", label: "CRITICAL" },
-  high:     { color: "#f97316", label: "HIGH"     },
-  medium:   { color: "#eab308", label: "MEDIUM"   },
-  low:      { color: "#22c55e", label: "LOW"      },
-};
-
 const categoryColors: Record<string, string> = {
   "Suspicious Activity":  "#ef4444",
   "Drug-Related":         "#a855f7",
@@ -175,7 +168,6 @@ export function PatrolHistory() {
       ) : (
         <div className="space-y-2">
           {filtered.map((r, idx) => {
-            const cfg   = priorityConfig[r.priority] ?? { color: "#6b7280", label: r.priority };
             const catC  = categoryColors[r.category] ?? "#6b7280";
             const isExp = expanded === r.id;
 
@@ -193,12 +185,11 @@ export function PatrolHistory() {
                   className="w-full flex items-start gap-3 p-4 text-left"
                   onClick={() => setExpanded(isExp ? null : r.id)}
                 >
-                  {/* Priority dot */}
+                  {/* Status dot */}
                   <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                    style={{ backgroundColor: `${cfg.color}18` }}
+                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 bg-blue-500/20"
                   >
-                    <CheckCircle className="w-4 h-4" style={{ color: cfg.color }} />
+                    <CheckCircle className="w-4 h-4" style={{ color: "#3b82f6" }} />
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -211,10 +202,9 @@ export function PatrolHistory() {
 
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
-                        className="px-1.5 py-0.5 rounded-full text-xs font-bold"
-                        style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}
+                        className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300"
                       >
-                        {cfg.label}
+                        Resolved
                       </span>
                       <span
                         className="px-1.5 py-0.5 rounded-full text-xs font-medium"

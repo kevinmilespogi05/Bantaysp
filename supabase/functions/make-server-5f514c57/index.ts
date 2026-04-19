@@ -674,7 +674,6 @@ app.post("/reports", async (c) => {
       title: body.title.toString().trim(),
       category: body.category.toString().trim(),
       status: "pending",
-      priority: (body.priority || "medium").toString().trim(),
       location: body.location.toString().trim(),
       timestamp: new Date().toISOString(),
       description: body.description.toString().trim(),
@@ -697,7 +696,6 @@ app.post("/reports", async (c) => {
           title: report.title,
           category: report.category,
           status: report.status,
-          priority: report.priority,
           location: report.location,
           timestamp: report.timestamp,
           description: report.description,
@@ -805,7 +803,7 @@ app.put("/reports/:id", async (c) => {
     const body = await c.req.json();
     
     // Validate allowed fields for update
-    const allowedFields = ["status", "verified", "priority"];
+    const allowedFields = ["status", "verified"];
     const updates: Record<string, any> = {};
     
     for (const field of allowedFields) {
@@ -1498,7 +1496,7 @@ app.get("/patrol/active-case", async (c) => {
     
     return c.json({
       id: active.id, title: active.title, category: active.category,
-      priority: active.priority, location: active.address, address: active.address,
+      location: active.address, address: active.address,
       distance: "250m", eta: "2 min", timeReported: active.timeReported,
       reporter: active.reporter || "Anonymous",
       reporterAvatar: active.reporterAvatar || "AN",
@@ -1523,7 +1521,7 @@ app.get("/patrol/assigned", async (c) => {
         .filter(i => i.status === "pending" || (i.assignedPatrol && i.assignedPatrol !== "PAT-001"))
         .map(i => ({
           id: i.id, title: i.title, category: i.category,
-          priority: i.priority, location: i.address || "Location N/A",
+          location: i.address || "Location N/A",
           distance: "N/A", timeReported: i.timeReported, status: i.status,
           reporter: i.reporter || "Anonymous",
           reporterAvatar: i.reporterAvatar || "AN",
@@ -1567,7 +1565,6 @@ app.post("/patrol/cases/:id/accept", async (c) => {
       id: incident.id,
       title: incident.title,
       category: incident.category,
-      priority: incident.priority,
       location: incident.address,
       address: incident.address,
       distance: "250m",

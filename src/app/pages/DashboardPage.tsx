@@ -30,7 +30,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { BantayLogo } from "../components/ui/BantayLogo";
 
-// ─── Status / Priority helpers ────────────────────────────────────────────────
+// ─── Status helpers ────────────────────────────────────────────────────────────
 
 const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
   pending_verification: { bg: "bg-amber-100", text: "text-amber-700",  label: "Pending Verification" },
@@ -38,9 +38,7 @@ const statusConfig: Record<string, { bg: string; text: string; label: string }> 
   in_progress: { bg: "bg-cyan-100", text: "text-cyan-700", label: "In Progress" },
   resolved:    { bg: "bg-green-100", text: "text-green-700",  label: "Resolved" },
 };
-const priorityDot: Record<string, string> = {
-  high: "#ef4444", medium: "#f59e0b", low: "#22c55e",
-};
+
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -282,7 +280,6 @@ export function DashboardPage() {
                     onClick={() => navigate("/app/reports")}
                     className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors cursor-pointer group"
                   >
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priorityDot[r.priority] }} />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-900 text-sm truncate">{r.title}</div>
                       <div className="flex items-center gap-2 mt-0.5">

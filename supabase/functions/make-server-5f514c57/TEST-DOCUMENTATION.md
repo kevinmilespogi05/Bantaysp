@@ -141,7 +141,6 @@ description: 10-2000 characters
 location:    5-200 characters
 category:    fire, crime, accident, hazard, other
 status:      pending, in_progress, resolved, rejected
-priority:    low, medium, high, urgent
 verified:    boolean (only settable by patrol/admin)
 ```
 
@@ -202,7 +201,6 @@ All endpoints now log with `[REQUEST_ID]` prefix for tracing:
   "description": "Large fire visible on top floor of 5-story commercial building.",
   "image_url": "https://res.cloudinary.com/dzqtdl5aa/image/upload/v1234567890/bantay-reports/fire.jpg",
   "status": "pending",
-  "priority": "urgent",
   "verified": false,
   "timestamp": "2024-01-15T10:30:00.000Z"
 }
