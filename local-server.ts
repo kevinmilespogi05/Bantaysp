@@ -828,7 +828,7 @@ app.get("/reports", async (req, res) => {
 /** POST /reports - Create a new report */
 app.post("/reports", async (req, res) => {
   try {
-    const { title, description, category, location, image_url, location_lat, location_lng, admin_notes } = req.body;
+    const { title, description, category, location, image_url, image_urls, location_lat, location_lng, admin_notes } = req.body;
 
     // Validate required fields
     if (!title || !description || !category || !location) {
@@ -964,6 +964,33 @@ app.post("/reports", async (req, res) => {
         },
       ])
       .select();
+    
+    // Store additional images after initial insert (when schema supports it)
+    if (data && !error && image_urls && image_urls.length > 1) {
+      // Multi-image support: try to update if columns exist
+      const updatePayload: any = {};
+      
+      // Try image_urls array column first (from migration 022)
+      if (image_urls.length > 0) {
+        updatePayload.image_urls = image_urls;
+      }
+      
+      // Also try images_json as fallback (from migration 023)
+      if (image_urls.length > 0) {
+        updatePayload.images_json = JSON.stringify(image_urls);
+      }
+      
+      try {
+        await supabase
+          .from("reports")
+          .update(updatePayload)
+          .eq("id", reportId);
+        console.log(`[CreateReport] ✅ Stored ${image_urls.length} image URLs for ${reportId}`);
+      } catch (updateErr) {
+        // Columns might not exist yet - that's ok, using single image_url
+        console.warn(`[CreateReport] Multi-image columns not available yet, using single image_url`);
+      }
+    }
 
     if (error) {
       console.error(`[CreateReport] Error creating report:`, error);
@@ -1257,39 +1284,82 @@ app.post("/conversations", async (req, res) => {
 
     // Check if conversation already exists (sort IDs for consistency)
     const conversationKey = [user.id, participant_id].sort().join(":");
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("conversations")
       .select("id")
       .eq("id", conversationKey)
       .single();
 
-    if (existing) {
-      return res.json({ id: existing.id, created: false });
+    let conversationId = conversationKey;
+    let created = false;
+
+    // If conversation doesn't exist, create it
+    if (!existing) {
+      console.log(`[Chat] Creating new conversation: ${conversationKey}`);
+      const { error: convError } = await supabase
+        .from("conversations")
+        .insert([{ id: conversationId }]);
+
+      if (convError) throw convError;
+      created = true;
+    } else {
+      console.log(`[Chat] ℹ️ Conversation already exists: ${conversationKey}`);
     }
 
-    // Create new conversation
-    const conversationId = conversationKey;
+    // Ensure both participants exist (insert or ignore)
     const participantId1 = Date.now() * 1000 + Math.floor(Math.random() * 1000);
     const participantId2 = participantId1 + 1;
 
-    const { error: convError } = await supabase
-      .from("conversations")
-      .insert([{ id: conversationId }]);
+    console.log(`[Chat] Ensuring participants exist for conversation ${conversationId}`);
 
-    if (convError) throw convError;
-
-    // Add both participants
-    const { error: partError } = await supabase
+    // Check which participants already exist
+    const { data: existingParticipants } = await supabase
       .from("conversation_participants")
-      .insert([
-        { id: participantId1, conversation_id: conversationId, user_id: user.id, role: userData.data?.role },
-        { id: participantId2, conversation_id: conversationId, user_id: participant_id, role: partnerData.data?.role },
-      ]);
+      .select("id, user_id, role")
+      .eq("conversation_id", conversationId);
 
-    if (partError) throw partError;
+    const hasUser1 = existingParticipants?.some(p => p.user_id === user.id);
+    const hasUser2 = existingParticipants?.some(p => p.user_id === participant_id);
 
-    console.log(`[Chat] ✅ Conversation created: ${conversationId}`);
-    res.status(201).json({ id: conversationId, created: true });
+    // Insert missing participants with their roles
+    // Map: resident → user (for conversation_participants constraint)
+    const toInsert = [];
+    if (!hasUser1) {
+      const role1 = userData.data?.role === 'resident' ? 'user' : (userData.data?.role || 'user');
+      toInsert.push({ 
+        id: participantId1, 
+        conversation_id: conversationId, 
+        user_id: user.id,
+        role: role1
+      });
+      console.log(`[Chat] Adding participant 1 (${user.id}, role: ${role1})`);
+    }
+    if (!hasUser2) {
+      const role2 = partnerData.data?.role === 'resident' ? 'user' : (partnerData.data?.role || 'user');
+      toInsert.push({ 
+        id: participantId2, 
+        conversation_id: conversationId, 
+        user_id: participant_id,
+        role: role2
+      });
+      console.log(`[Chat] Adding participant 2 (${participant_id}, role: ${role2})`);
+    }
+
+    if (toInsert.length > 0) {
+      const { error: partError } = await supabase
+        .from("conversation_participants")
+        .insert(toInsert);
+
+      if (partError) {
+        console.error(`[Chat] Error inserting participants:`, partError);
+        throw partError;
+      }
+    } else {
+      console.log(`[Chat] Both participants already exist`);
+    }
+
+    console.log(`[Chat] ✅ Conversation ready: ${conversationId} (created: ${created})`);
+    res.status(created ? 201 : 200).json({ id: conversationId, created });
   } catch (err) {
     console.error(`[Chat] Error creating conversation:`, err);
     res.status(500).json({ error: "Failed to create conversation" });
@@ -1318,6 +1388,8 @@ app.get("/conversations", async (req, res) => {
 
     if (error) throw error;
 
+    console.log(`[Chat] Found ${conversations?.length || 0} conversation_participants for user`);
+
     // Get latest message for each conversation
     const conversationIds = conversations?.map(c => c.conversation_id) || [];
     const result = [];
@@ -1328,6 +1400,9 @@ app.get("/conversations", async (req, res) => {
         .from("conversation_participants")
         .select("user_id, role")
         .eq("conversation_id", convId);
+
+      console.log(`[Chat] Conversation ${convId} has ${participants?.length} participants:`);
+      participants?.forEach(p => console.log(`  - User: ${p.user_id}, Role: ${p.role}`));
 
       // Get latest message
       const { data: messages } = await supabase
@@ -1345,6 +1420,9 @@ app.get("/conversations", async (req, res) => {
         .eq("id", otherUserId)
         .single();
 
+      console.log(`[Chat] Last message: "${messages?.[0]?.content}" sent by ${messages?.[0]?.sender_id}`);
+      console.log(`[Chat] Showing as participant: ${otherUser?.first_name} ${otherUser?.last_name} (${otherUserId})`);
+
       result.push({
         id: convId,
         participant: {
@@ -1357,6 +1435,7 @@ app.get("/conversations", async (req, res) => {
       });
     }
 
+    console.log(`[Chat] ✅ Returning ${result.length} conversations`);
     res.json(result);
   } catch (err) {
     console.error(`[Chat] Error fetching conversations:`, err);
@@ -1402,9 +1481,11 @@ app.get("/conversations/:id/messages", async (req, res) => {
       (messages || []).map(async (msg) => {
         const { data: sender } = await supabase
           .from("user_profiles")
-          .select("first_name, last_name, avatar")
+          .select("first_name, last_name, role, avatar")
           .eq("id", msg.sender_id)
           .single();
+
+        console.log(`[Chat] 📨 Message: "${msg.content.substring(0, 50)}" | sender_id: ${msg.sender_id} | sender: ${sender?.first_name} ${sender?.last_name} (${sender?.role})`);
 
         return {
           ...msg,
@@ -1416,6 +1497,11 @@ app.get("/conversations/:id/messages", async (req, res) => {
         };
       })
     );
+
+    console.log(`[Chat] 📤 Returning ${enrichedMessages.length} messages to client`);
+    enrichedMessages.forEach((msg, idx) => {
+      console.log(`[Chat]   [${idx}] "${msg.content.substring(0, 30)}" from ${msg.sender.name} (${msg.sender_id.slice(-4)})`);
+    });
 
     res.json(enrichedMessages);
   } catch (err) {
@@ -1439,7 +1525,18 @@ app.post("/conversations/:id/messages", async (req, res) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ error: "Unauthorized" });
 
-    console.log(`[Chat] User ${user.id} sending message to conversation: ${id}`);
+    console.log(`[Chat] User ${user.id} (name from JWT) sending message to conversation: ${id}`);
+    console.log(`[Chat] ⚠️ IMPORTANT: Conversation ID structure: ${id}`);
+    console.log(`[Chat] ⚠️ This should contain TWO sorted user IDs separated by colon`);
+    
+    // Get user profile to verify role
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("id, first_name, last_name, role")
+      .eq("id", user.id)
+      .single();
+    
+    console.log(`[Chat] Authenticated user: ${userProfile?.first_name} ${userProfile?.last_name} (${userProfile?.role}), ID: ${user.id}`);
 
     // Verify user is in conversation
     const { data: participant } = await supabase
@@ -1469,6 +1566,12 @@ app.post("/conversations/:id/messages", async (req, res) => {
 
     // Insert message
     const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    console.log(`[Chat] 🔴 INSERTING MESSAGE WITH:`);
+    console.log(`[Chat]   - Message ID: ${messageId}`);
+    console.log(`[Chat]   - Conversation ID: ${id}`);
+    console.log(`[Chat]   - Sender ID: ${user.id}`);
+    console.log(`[Chat]   - Content: "${content.trim()}"`);
+    
     const { data, error } = await supabase
       .from("messages")
       .insert([{
@@ -1481,13 +1584,14 @@ app.post("/conversations/:id/messages", async (req, res) => {
 
     if (error) throw error;
 
+    console.log(`[Chat] ✅ Message inserted with ID: ${messageId}, sender_id: ${user.id}`);
+    console.log(`[Chat] Returned data from insert:`, data?.[0]);
+
     // Update conversation updated_at
     await supabase
       .from("conversations")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", id);
-
-    console.log(`[Chat] ✅ Message sent: ${messageId}`);
 
     // Enrich response with sender info
     const { data: sender } = await supabase
@@ -1715,6 +1819,48 @@ app.get("/profile/:userId", async (req, res) => {
   } catch (err) {
     console.error(`[Profile] Error:`, err);
     res.status(500).json({ error: "Failed to fetch user profile" });
+  }
+});
+
+// ─── Update Profile ───────────────────────────────────────────────────────────
+
+app.put("/profile/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { first_name, last_name, phone, bio } = req.body;
+
+    console.log(`[Profile] Updating profile for user: ${userId}`, { first_name, last_name, phone, bio });
+
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId parameter" });
+    }
+
+    // Build update object with only provided fields
+    const updates: Record<string, any> = {};
+    if (first_name !== undefined) updates.first_name = first_name;
+    if (last_name !== undefined) updates.last_name = last_name;
+    if (phone !== undefined) updates.phone = phone;
+    if (bio !== undefined) updates.bio = bio;
+    updates.updated_at = new Date().toISOString();
+
+    // Update user profile in database
+    const { data: updated, error } = await supabase
+      .from("user_profiles")
+      .update(updates)
+      .eq("id", userId)
+      .select()
+      .single();
+
+    if (error || !updated) {
+      console.error(`[Profile] Update error:`, error);
+      return res.status(500).json({ error: "Failed to update profile" });
+    }
+
+    console.log(`[Profile] ✅ Updated profile for user ${userId}`);
+    res.json(updated);
+  } catch (err) {
+    console.error(`[Profile] Error:`, err);
+    res.status(500).json({ error: "Failed to update profile" });
   }
 });
 

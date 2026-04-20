@@ -29,7 +29,31 @@ export function ChatPage() {
         const { data: convs, error: err } = await getConversations();
         if (err) throw new Error(err);
 
-        setConversations(convs || []);
+        const loadedConversations = convs || [];
+        console.log("[Chat] Loaded conversations:", loadedConversations.map(c => ({ id: c.id, name: c.participant?.name })));
+        setConversations(loadedConversations);
+
+        // Check if a conversation ID was stored in localStorage (from NewChatPage)
+        const storedConvId = localStorage.getItem("selectedConversationId");
+        console.log("[Chat] Checking localStorage for selectedConversationId:", storedConvId);
+        
+        if (storedConvId && loadedConversations.length > 0) {
+          console.log("[Chat] Looking for conversation ID:", storedConvId);
+          const selected = loadedConversations.find((c) => c.id === storedConvId);
+          console.log("[Chat] Found conversation:", selected);
+          if (selected) {
+            setSelectedConversation(selected);
+            setShowMobile(true);
+            localStorage.removeItem("selectedConversationId");
+          } else {
+            console.log("[Chat] ⚠️ Conversation ID not found in list!");
+          }
+        } else if (loadedConversations.length > 0) {
+          // Auto-select the first conversation if none was passed
+          console.log("[Chat] No conversation ID in storage, auto-selecting first");
+          setSelectedConversation(loadedConversations[0]);
+          setShowMobile(true);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to load conversations";
         setError(message);
@@ -56,7 +80,7 @@ export function ChatPage() {
   );
 
   return (
-    <div className="flex h-full bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
+    <div className="flex h-full w-full bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
       {/* ── Sidebar: Conversations List ── */}
       <div className={`${showMobile ? "hidden" : "flex"} sm:flex w-full sm:w-80 flex-col bg-white border-r border-gray-200`}>
         {/* Header */}
@@ -175,11 +199,11 @@ export function ChatPage() {
       </div>
 
       {/* ── Main: Chat Window ── */}
-      <div className={`${showMobile ? "flex" : "hidden"} sm:flex flex-1 flex-col bg-white`}>
+      <div className={`${showMobile ? "flex" : "hidden"} sm:flex flex-1 flex-col h-full bg-white`}>
         {selectedConversation ? (
           <>
             {/* Mobile Header with Back Button */}
-            <div className="sm:hidden flex items-center gap-3 p-4 border-b border-gray-200 bg-white">
+            <div className="sm:hidden flex items-center gap-3 p-4 border-b border-gray-200 bg-white shrink-0">
               <button
                 onClick={() => setShowMobile(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"

@@ -115,6 +115,7 @@ interface FilePreview {
   type: "image" | "file";
   preview?: string;
   size: number;
+  file: File;
 }
 
 interface LocationData {
@@ -244,6 +245,7 @@ export function CreateReportPage() {
       type: file.type.startsWith("image/") ? "image" : "file",
       preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
       size: file.size,
+      file: file,
     }));
     setFiles((prev) => [...prev, ...newFiles].slice(0, 5));
   };
@@ -270,24 +272,39 @@ export function CreateReportPage() {
     setUploadProgress(null);
 
     let imageUrl: string | null = null;
+    let imageUrls: string[] = [];
 
-    // Step 1: Upload image to Cloudinary if one exists
-    if (files.length > 0 && files[0].type === "image") {
+    // Step 1: Upload all images to Cloudinary if they exist
+    if (files.length > 0) {
       setUploadingImage(true);
-      setUploadProgress("Uploading image...");
+      const imageFiles = files.filter(f => f.type === "image");
+      
+      if (imageFiles.length > 0) {
+        try {
+          for (let i = 0; i < imageFiles.length; i++) {
+            const filePreview = imageFiles[i];
+            setUploadProgress(`Uploading image ${i + 1} of ${imageFiles.length}...`);
+            const uploadResult = await uploadToCloudinary(filePreview.file);
 
-      const fileInput = fileInputRef.current;
-      if (fileInput?.files && fileInput.files[0]) {
-        const fileToUpload = fileInput.files[0];
-        const uploadResult = await uploadToCloudinary(fileToUpload);
-
-        if (uploadResult.success) {
-          imageUrl = uploadResult.url;
-          setUploadProgress("Image uploaded successfully");
-        } else {
+            if (uploadResult.success) {
+              imageUrls.push(uploadResult.url);
+            } else {
+              setUploadingImage(false);
+              setSubmitting(false);
+              setSubmitError(`Image upload failed: ${uploadResult.error}`);
+              return;
+            }
+          }
+          
+          // Set primary image as first uploaded image
+          if (imageUrls.length > 0) {
+            imageUrl = imageUrls[0];
+            setUploadProgress(`Successfully uploaded ${imageUrls.length} image${imageUrls.length !== 1 ? 's' : ''}`);
+          }
+        } catch (err) {
           setUploadingImage(false);
           setSubmitting(false);
-          setSubmitError(`Image upload failed: ${uploadResult.error}`);
+          setSubmitError("Failed to upload images. Please try again.");
           return;
         }
       }
@@ -302,6 +319,7 @@ export function CreateReportPage() {
       category: form.category,
       location: form.location,
       image_url: imageUrl,
+      image_urls: imageUrls.length > 0 ? imageUrls : undefined,
       location_lat: geoLocation?.latitude || markerPos?.[0],
       location_lng: geoLocation?.longitude || markerPos?.[1],
       admin_notes: form.admin_notes || undefined,

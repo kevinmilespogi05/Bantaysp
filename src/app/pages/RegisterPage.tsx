@@ -31,6 +31,8 @@ export function RegisterPage() {
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  // Prevent duplicate requests by tracking last request time for each step
+  const [lastRequestTime, setLastRequestTime] = useState<Record<number, number>>({});
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -47,6 +49,15 @@ export function RegisterPage() {
 
   const handleNext = async () => {
     setError(null);
+
+    // Prevent rapid duplicate requests (within 2 seconds) on the same step
+    // This helps prevent multiple OTP emails when network is slow/unreliable
+    const now = Date.now();
+    if (lastRequestTime[step] && now - lastRequestTime[step] < 2000) {
+      setError("Please wait a moment before trying again");
+      return;
+    }
+    setLastRequestTime({ ...lastRequestTime, [step]: now });
 
     // Step 1 -> Step 2: Register with backend (generates OTP)
     if (step === 1) {
@@ -209,6 +220,18 @@ export function RegisterPage() {
 
   const handleResendOtp = async () => {
     setError(null);
+    
+    // Prevent rapid resend requests - minimum 3 seconds between attempts
+    const now = Date.now();
+    const resendKey = 'otp-resend-last-time';
+    const lastResendTime = (window as any).__lastOtpResendTime || 0;
+    
+    if (now - lastResendTime < 3000) {
+      setError("Please wait a moment before requesting a new code");
+      return;
+    }
+    (window as any).__lastOtpResendTime = now;
+    
     setLoading(true);
 
     const { data, error } = await resendOtp({
@@ -399,11 +422,16 @@ export function RegisterPage() {
                       <input
                         type="tel"
                         value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        onChange={(e) => {
+                          // Allow only digits and limit to 11 characters
+                          const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 11);
+                          setForm({ ...form, phone: digitsOnly });
+                        }}
                         placeholder="09XX XXX XXXX"
                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none bg-white"
                         onFocus={(e) => (e.target.style.borderColor = "#800000")}
                         onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                        inputMode="numeric"
                       />
                     </div>
                   </div>

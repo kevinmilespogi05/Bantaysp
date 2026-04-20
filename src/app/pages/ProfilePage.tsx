@@ -6,7 +6,7 @@ import {
   FileText, Lock, Bell, Eye, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useApi, fetchUserProfile } from "../services/api";
+import { useApi, fetchUserProfile, updateProfile } from "../services/api";
 import { PageSpinner, EmptyState } from "../components/ui/DataStates";
 
 const achievementIcons: Record<string, LucideIcon> = {
@@ -30,6 +30,8 @@ export function ProfilePage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", bio: "" });
   const [notifications, setNotifications] = useState({
     email: true, push: true, sms: false, announcements: true, reportUpdates: true,
   });
@@ -55,7 +57,39 @@ export function ProfilePage() {
     verified: profileData?.verified ?? false,
     joined: profileData?.joined ?? "—",
     bio: profileData?.bio ?? "",
+    phone: profileData?.phone ?? "",
     achievements: profileData?.achievements ?? [],
+  };
+
+  // Initialize edit form when user starts editing
+  const handleStartEdit = () => {
+    setEditForm({
+      firstName: displayUser.firstName,
+      lastName: displayUser.lastName,
+      phone: displayUser.phone,
+      bio: displayUser.bio,
+    });
+    setEditing(true);
+  };
+
+  // Save changes to database
+  const handleSaveChanges = async () => {
+    if (!user.id) return;
+    setSaving(true);
+    
+    const { error } = await updateProfile(user.id, {
+      first_name: editForm.firstName,
+      last_name: editForm.lastName,
+      phone: editForm.phone,
+      bio: editForm.bio,
+    });
+
+    setSaving(false);
+    if (!error) {
+      setEditing(false);
+      // Optionally, refetch the profile to ensure latest data
+      window.location.reload();
+    }
   };
 
   return (
@@ -111,7 +145,7 @@ export function ProfilePage() {
 
             {/* Edit button */}
             <button
-              onClick={() => setEditing(!editing)}
+              onClick={() => editing ? setEditing(false) : handleStartEdit()}
               className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition-all shrink-0 sm:mb-1 min-h-[44px]"
             >
               <Edit3 className="w-4 h-4" />
@@ -172,29 +206,55 @@ export function ProfilePage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                      <input defaultValue="Juan" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
+                      <input 
+                        value={editForm.firstName} 
+                        onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
                         onFocus={(e) => (e.target.style.borderColor = "#800000")}
                         onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                      <input defaultValue="dela Cruz" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
+                      <input 
+                        value={editForm.lastName}
+                        onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
                         onFocus={(e) => (e.target.style.borderColor = "#800000")}
                         onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")} />
                     </div>
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                    <input 
+                      value={editForm.phone}
+                      onChange={(e) => {
+                        // Allow only digits and limit to 11 characters
+                        const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 11);
+                        setEditForm({ ...editForm, phone: digitsOnly });
+                      }}
+                      placeholder="09XX XXX XXXX"
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
+                      onFocus={(e) => (e.target.style.borderColor = "#800000")}
+                      onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                      inputMode="numeric" />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
-                    <textarea rows={3} defaultValue={displayUser.bio} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none resize-none"
+                    <textarea 
+                      rows={3} 
+                      value={editForm.bio}
+                      onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none resize-none"
                       onFocus={(e) => (e.target.style.borderColor = "#800000")}
                       onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")} />
                   </div>
                   <button
-                    onClick={() => setEditing(false)}
-                    className="px-5 py-2.5 rounded-xl text-white text-sm font-medium hover:opacity-90 transition-all"
+                    onClick={handleSaveChanges}
+                    disabled={saving}
+                    className="px-5 py-2.5 rounded-xl text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-70"
                     style={{ backgroundColor: "#800000" }}
                   >
-                    Save Changes
+                    {saving ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
               ) : (
@@ -205,7 +265,7 @@ export function ProfilePage() {
                   </div>
                   <div className="flex items-center gap-3 text-gray-600 text-sm">
                     <Phone className="w-4 h-4 text-gray-400 shrink-0" />
-                    09XX XXX XXXX
+                    {displayUser.phone || "Not provided"}
                   </div>
                   <div className="flex items-center gap-3 text-gray-600 text-sm">
                     <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
@@ -216,7 +276,7 @@ export function ProfilePage() {
                     Member since {displayUser.joined}
                   </div>
                   <div className="p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-600 text-sm leading-relaxed">{displayUser.bio}</p>
+                    <p className="text-gray-600 text-sm leading-relaxed">{displayUser.bio || "No bio added yet"}</p>
                   </div>
                 </div>
               )}

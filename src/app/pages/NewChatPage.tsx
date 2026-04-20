@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, Search, Loader, AlertCircle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { createConversation, fetchAllUsers, type UserProfile } from "../services/api";
+import { createConversation, fetchVerifiedUsers, type UserProfile } from "../services/api";
 import { SkeletonCard, EmptyState, ErrorState } from "../components/ui/DataStates";
 
 export function NewChatPage() {
@@ -24,7 +24,7 @@ export function NewChatPage() {
         setLoading(true);
         setError(null);
 
-        const { data: users, error: err } = await fetchAllUsers();
+        const { data: users, error: err } = await fetchVerifiedUsers();
         if (err) throw new Error(err);
 
         // Filter to only show admins/patrol (cannot chat with regular users)
@@ -48,14 +48,17 @@ export function NewChatPage() {
   const handleStartChat = async (adminId: string) => {
     try {
       setCreating(adminId);
+      console.log("[Chat] Creating conversation with admin:", adminId);
       const { data, error: err } = await createConversation(adminId);
 
       if (err) throw new Error(err);
 
       if (data) {
+        console.log("[Chat] ✅ Conversation created:", data);
+        // Store conversation ID in localStorage for ChatPage to pick up
+        localStorage.setItem("selectedConversationId", data.id);
         // Navigate to chat with this admin
         navigate("/app/chat");
-        // Optional: You could pass the conversation ID to pre-select it
       }
     } catch (err) {
       alert("Failed to start chat: " + (err instanceof Error ? err.message : "Unknown error"));

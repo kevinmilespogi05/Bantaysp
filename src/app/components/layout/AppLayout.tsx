@@ -51,8 +51,8 @@ export function AppLayout() {
         <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Header onMenuToggle={() => setMobileOpen(true)} />
-          <main className="flex-1 overflow-y-auto">
-            <div className="p-4 md:p-6">
+          <main className="flex-1 overflow-hidden">
+            <div className="h-full p-4 md:p-6 overflow-y-auto">
               <Outlet />
             </div>
           </main>

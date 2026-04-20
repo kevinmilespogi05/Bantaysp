@@ -14,6 +14,7 @@ import {
   type Report, type Comment,
 } from "../services/api";
 import { SkeletonCard, EmptyState, ErrorState } from "../components/ui/DataStates";
+import { ImageViewerModal } from "../components/ui/ImageViewerModal";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ export function ReportsPage() {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [showImageViewer, setShowImageViewer] = useState(false);
 
   // Optimistic upvote state derived from fetched data
   const [upvoteMap, setUpvoteMap] = useState<Record<string, number>>({});
@@ -394,9 +396,17 @@ export function ReportsPage() {
               className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-white z-50 flex flex-col shadow-2xl"
             >
               {selectedReport.image_url && (
-                <div className="h-52 overflow-hidden relative shrink-0">
-                  <img src={selectedReport.image_url} alt={selectedReport.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div 
+                  className="h-52 overflow-hidden relative shrink-0 cursor-pointer group"
+                  onClick={() => setShowImageViewer(true)}
+                >
+                  <img src={selectedReport.image_url} alt={selectedReport.title} className="w-full h-full object-cover group-hover:opacity-90 transition-opacity" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent group-hover:from-black/70" />
+                  {(selectedReport.image_urls && selectedReport.image_urls.length > 1) && (
+                    <div className="absolute top-3 right-3 bg-black/60 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      {selectedReport.image_urls.length} photos
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -683,6 +693,17 @@ export function ReportsPage() {
           </>
         )}
       </AnimatePresence>
+
+      {/* Image Viewer Modal */}
+      {selectedReport && (
+        <ImageViewerModal 
+          isOpen={showImageViewer}
+          imageUrl={selectedReport.image_url}
+          imageUrls={selectedReport.image_urls}
+          title={selectedReport.title}
+          onClose={() => setShowImageViewer(false)}
+        />
+      )}
     </div>
   );
 }

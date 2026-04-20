@@ -5,9 +5,10 @@ import { useAuth } from "../../context/AuthContext";
 
 interface MessageInputProps {
   conversationId: string;
+  onOptimisticMessage?: (content: string) => void;
 }
 
-export function MessageInput({ conversationId }: MessageInputProps) {
+export function MessageInput({ conversationId, onOptimisticMessage }: MessageInputProps) {
   const { user } = useAuth();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -26,17 +27,22 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   const handleSend = useCallback(async () => {
     if (!input.trim() || sending) return;
 
+    const messageContent = input.trim();
     setSending(true);
+
+    // Optimistic update - show message immediately
+    onOptimisticMessage?.(messageContent);
+
     try {
-      const { data, error } = await sendMessage(conversationId, input);
+      const { data, error } = await sendMessage(conversationId, messageContent);
 
       if (error) {
         console.error("Error sending message:", error);
-        // Show error toast if needed
+        // Could show error toast here if needed
       }
 
       // Clear input on success
-      if (!error && data) {
+      if (!error) {
         setInput("");
         if (textareaRef.current) {
           textareaRef.current.style.height = "auto";
@@ -47,7 +53,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     } finally {
       setSending(false);
     }
-  }, [input, sending, conversationId]);
+  }, [input, sending, conversationId, onOptimisticMessage]);
 
   // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -58,7 +64,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   };
 
   return (
-    <div className="flex items-end gap-2 p-4 border-t border-gray-200 bg-white">
+    <div className="w-full flex items-end gap-2 p-4 border-t border-gray-200 bg-white shrink-0">
       <textarea
         ref={textareaRef}
         value={input}
@@ -74,7 +80,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
       <button
         onClick={handleSend}
         disabled={!input.trim() || sending}
-        className="flex items-center justify-center w-10 h-10 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+        className="flex items-center justify-center w-10 h-10 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95 shrink-0"
         style={{ backgroundColor: "#800000" }}
         title={sending ? "Sending..." : "Send message"}
       >

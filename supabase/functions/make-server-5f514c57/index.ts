@@ -220,44 +220,15 @@ app.post("/register", async (c) => {
       .single();
 
     if (!pendingCheckError) {
-      // Email already in pending registration - regenerate OTP and resend
-      // This allows users to retry if they didn't receive the first OTP
-      console.log(`[Register] Email already pending, regenerating OTP for: ${email}`);
+      // Email already in pending registration - don't send OTP here
+      // OTP will be sent via /generate-otp endpoint when user transitions to Step 3
+      console.log(`[Register] Email already pending, skipping re-registration for: ${email}`);
       
-      const newOtp = generateOtp();
-      const now = new Date();
-      
-      const { error: updateError } = await supabase
-        .from("pending_registrations")
-        .update({
-          otp_code: newOtp,
-          otp_created_at: now.toISOString(),
-          first_name: firstName,
-          last_name: lastName,
-          password_hash: password,
-          phone: phone || null,
-          barangay,
-        })
-        .eq("email", email);
-      
-      if (updateError) {
-        console.error(`[Register] Failed to regenerate OTP:`, updateError);
-        return c.json({ error: `Failed to regenerate OTP: ${updateError.message}` }, 500);
-      }
-      
-      // Resend OTP email
-      try {
-        await sendOtpEmail(email, newOtp, 15);
-      } catch (emailErr) {
-        console.warn(`[Register] Email resend failed (non-fatal):`, emailErr);
-      }
-      
-      console.log(`✅ [Register] OTP regenerated for ${email}, new code: ${newOtp}`);
       return c.json({
         email,
-        firstName,
-        lastName,
-        message: "We sent you a new verification code. Please check your email.",
+        firstName: existingPending.first_name || firstName,
+        lastName: existingPending.last_name || lastName,
+        message: "Registration in progress. Please continue with ID upload.",
       }, 200);
     }
 
@@ -480,6 +451,129 @@ app.post("/verify-otp", async (c) => {
   }
 });
 
+// ─── OTP Generation (Step 2->3) ────────────────────────────────────────────────
+// Generates and sends OTP when user transitions from ID upload to verification
+// Uses idempotency to prevent duplicate emails if user clicks multiple times
+
+app.post("/generate-otp", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { email, firstName, lastName, password, phone, barangay, role, idPhotoUrl } = body;
+
+    // Validate required fields
+    if (!email) {
+      return c.json({ error: "Missing required field: email" }, 400);
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return c.json({ error: "Invalid email format" }, 400);
+    }
+
+    // Idempotency check: only send OTP if one wasn't sent in the last 60 seconds
+    // This prevents duplicate emails when user clicks "Next" multiple times due to network issues
+    const idempotencyKey = `otp-send:${email}`;
+    const lastSendTime = await kv.get(idempotencyKey);
+    const now = Date.now();
+    
+    if (lastSendTime && (now - lastSendTime.timestamp) < 60000) {
+      // OTP was sent recently - return success without sending again
+      console.log(`[GenerateOTP] Idempotency: OTP for ${email} already sent ${Math.round((now - lastSendTime.timestamp) / 1000)}s ago`);
+      return c.json({
+        success: true,
+        email,
+        message: "OTP code sent to your email. It expires in 15 minutes.",
+        note: "If you don't see it, check your spam folder or request a new code.",
+      }, 200);
+    }
+
+    // Look up pending registration
+    const { data: pendingReg, error: pendingError } = await supabase
+      .from("pending_registrations")
+      .select("*")
+      .eq("email", email)
+      .single();
+
+    if (pendingError || !pendingReg) {
+      console.error("[GenerateOTP] Pending registration not found for:", email);
+      return c.json({ error: "No pending registration found. Please register again." }, 404);
+    }
+
+    // Check if OTP is still valid (not expired and recent)
+    const otpAge = Date.now() - new Date(pendingReg.otp_created_at).getTime();
+    const otpAgeMinutes = Math.floor(otpAge / 60000);
+    
+    if (otpAgeMinutes < 14) {
+      // OTP is recent and valid - just send the existing one without regenerating
+      console.log(`[GenerateOTP] Reusing existing OTP for ${email} (${otpAgeMinutes} minutes old)`);
+      try {
+        await sendOtpEmail(email, pendingReg.otp_code, 15);
+        
+        // Record this send attempt for idempotency
+        await kv.set(idempotencyKey, { timestamp: now, email });
+        
+        console.log(`[GenerateOTP] OTP resent to ${email} (existing code)`);
+        return c.json({
+          success: true,
+          email,
+          message: "OTP code sent to your email. It expires in 15 minutes.",
+        }, 200);
+      } catch (emailErr) {
+        console.error(`[GenerateOTP] Email sending failed:`, emailErr);
+        return c.json({
+          error: "Failed to send OTP email. Please try again later.",
+        }, 503);
+      }
+    }
+
+    // OTP is old/expired - generate a new one
+    const newOtp = generateOtp();
+    const newTimestamp = new Date();
+
+    const { error: updateError } = await supabase
+      .from("pending_registrations")
+      .update({
+        otp_code: newOtp,
+        otp_created_at: newTimestamp.toISOString(),
+        first_name: firstName || pendingReg.first_name,
+        last_name: lastName || pendingReg.last_name,
+        phone: phone !== undefined ? phone : pendingReg.phone,
+        barangay: barangay || pendingReg.barangay,
+      })
+      .eq("email", email);
+
+    if (updateError) {
+      console.error(`[GenerateOTP] Update error:`, updateError);
+      return c.json({ error: "Failed to generate OTP" }, 500);
+    }
+
+    // Send OTP email
+    try {
+      await sendOtpEmail(email, newOtp, 15);
+      
+      // Record this send attempt for idempotency
+      await kv.set(idempotencyKey, { timestamp: now, email });
+      
+      console.log(`[GenerateOTP] ✅ New OTP sent to ${email}`);
+      return c.json({
+        success: true,
+        email,
+        message: "OTP code sent to your email. It expires in 15 minutes.",
+      }, 200);
+    } catch (emailErr) {
+      console.error(`[GenerateOTP] Email sending failed:`, emailErr);
+      return c.json({
+        error: "Failed to send OTP email. Please try again later.",
+      }, 503);
+    }
+  } catch (err) {
+    console.error("[GenerateOTP] Error:", err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `OTP generation failed: ${errorMsg}` }, 500);
+  }
+});
+
 // ─── OTP Resend ───────────────────────────────────────────────────────────────
 
 app.post("/resend-otp", async (c) => {
@@ -509,6 +603,21 @@ app.post("/resend-otp", async (c) => {
         error: `Too many resend requests. Please try again in ${waitTime} minutes.`,
         retryAfter: waitTime,
       }, 429);
+    }
+
+    // Idempotency check: only send OTP if one wasn't sent in the last 30 seconds
+    // This prevents duplicate emails if network request is retried
+    const idempotencyKey = `otp-resend:${email}`;
+    const lastSendTime = await kv.get(idempotencyKey);
+    const nowMs = Date.now();
+    
+    if (lastSendTime && (nowMs - lastSendTime.timestamp) < 30000) {
+      // OTP was resent recently - return success without sending again
+      console.log(`[ResendOTP] Idempotency: OTP for ${email} already resent ${Math.round((nowMs - lastSendTime.timestamp) / 1000)}s ago`);
+      return c.json({
+        success: true,
+        message: "OTP sent to your email. It expires in 15 minutes.",
+      }, 200);
     }
 
     // Look up pending registration
@@ -546,6 +655,10 @@ app.post("/resend-otp", async (c) => {
     // Send OTP email
     try {
       await sendOtpEmail(email, newOtp, 15);
+      
+      // Record this send attempt for idempotency
+      await kv.set(idempotencyKey, { timestamp: nowMs, email });
+      
       console.log(`[ResendOTP] New OTP sent to ${email}`);
     } catch (emailErr) {
       console.error(`[ResendOTP] Email sending failed for ${email}:`, emailErr);
@@ -1588,21 +1701,68 @@ app.post("/patrol/cases/:id/accept", async (c) => {
 // ─── Profile ──────────────────────────────────────────────────────────────────
 
 app.get("/profile/:userId", async (c) => {
-  const userId = c.req.param("userId");
-  const profile = await kv.get(`profile:${userId}`);
-  return c.json(profile ?? null);
+  try {
+    const userId = c.req.param("userId");
+    
+    if (!userId) {
+      return c.json({ error: "Missing userId parameter" }, 400);
+    }
+
+    const { data: profile, error } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (error || !profile) {
+      console.error("[Profile] Fetch error:", error);
+      return c.json({ error: "Profile not found" }, 404);
+    }
+
+    return c.json(profile);
+  } catch (err) {
+    console.error("[Profile] Error:", err);
+    return c.json({ error: "Failed to fetch profile" }, 500);
+  }
 });
 
 app.put("/profile/:userId", async (c) => {
   try {
     const userId = c.req.param("userId");
-    const existing = (await kv.get(`profile:${userId}`)) ?? {};
+    
+    if (!userId) {
+      return c.json({ error: "Missing userId parameter" }, 400);
+    }
+
     const body = await c.req.json();
-    const updated = { ...existing, ...body };
-    await kv.set(`profile:${userId}`, updated);
-    return c.json(updated);
+    const { first_name, last_name, phone, bio } = body;
+
+    // Build update object with only provided fields
+    const updates: Record<string, any> = {};
+    if (first_name !== undefined) updates.first_name = first_name;
+    if (last_name !== undefined) updates.last_name = last_name;
+    if (phone !== undefined) updates.phone = phone;
+    if (bio !== undefined) updates.bio = bio;
+    updates.updated_at = new Date().toISOString();
+
+    const { data: updated, error } = await supabase
+      .from("user_profiles")
+      .update(updates)
+      .eq("id", userId)
+      .select()
+      .single();
+
+    if (error || !updated) {
+      console.error("[Profile] Update error:", error);
+      return c.json({ error: "Failed to update profile" }, 500);
+    }
+
+    console.log(`[Profile] ✅ Updated profile for user ${userId}`);
+    return c.json(updated, 200);
   } catch (err) {
-    return c.json({ error: "Failed to update profile" }, 500);
+    console.error("[Profile] Error:", err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to update profile: ${errorMsg}` }, 500);
   }
 });
 

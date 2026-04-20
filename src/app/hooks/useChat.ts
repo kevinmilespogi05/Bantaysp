@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Message } from "../services/api";
 
@@ -13,6 +13,9 @@ export function useMessages(conversationId: string | null) {
       return;
     }
 
+    let isActive = true;
+    let channel: any = null;
+
     const fetchAndSubscribe = async () => {
       try {
         setLoading(true);
@@ -26,11 +29,17 @@ export function useMessages(conversationId: string | null) {
           .order("created_at", { ascending: true });
 
         if (fetchError) throw fetchError;
-        setMessages(messages || []);
+        if (isActive) {
+          setMessages(messages || []);
+        }
 
-        // Subscribe to new/updated messages
-        const channel = supabase
-          .channel(`messages:${conversationId}`)
+        // Subscribe to real-time changes
+        channel = supabase
+          .channel(`messages:${conversationId}`, {
+            config: {
+              broadcast: { self: true },
+            },
+          })
           .on(
             "postgres_changes",
             {
@@ -40,7 +49,16 @@ export function useMessages(conversationId: string | null) {
               filter: `conversation_id=eq.${conversationId}`,
             },
             (payload) => {
-              setMessages((prev) => [...prev, payload.new as Message]);
+              console.log("[Chat] Real-time INSERT received:", payload.new);
+              if (isActive) {
+                setMessages((prev) => {
+                  // Check if message already exists (prevent duplicates)
+                  if (prev.some((m) => m.id === payload.new.id)) {
+                    return prev;
+                  }
+                  return [...prev, payload.new as Message];
+                });
+              }
             }
           )
           .on(
@@ -52,28 +70,42 @@ export function useMessages(conversationId: string | null) {
               filter: `conversation_id=eq.${conversationId}`,
             },
             (payload) => {
-              setMessages((prev) =>
-                prev.map((m) => (m.id === payload.new.id ? payload.new : m))
-              );
+              console.log("[Chat] Real-time UPDATE received:", payload.new);
+              if (isActive) {
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === payload.new.id ? (payload.new as Message) : m))
+                );
+              }
             }
           )
-          .subscribe();
-
-        return () => {
-          channel.unsubscribe();
-        };
+          .subscribe((status) => {
+            console.log("[Chat] Subscription status:", status);
+            if (status === "SUBSCRIBED") {
+              console.log(`[Chat] ✅ Subscribed to messages in conversation: ${conversationId}`);
+            } else if (status === "CHANNEL_ERROR") {
+              console.error("[Chat] Subscription error");
+            }
+          });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to fetch messages";
-        setError(message);
-        console.error("Error fetching messages:", err);
+        console.error("[Chat] Error fetching messages:", err);
+        if (isActive) {
+          setError(message);
+        }
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+        }
       }
     };
 
-    const unsubscribe = fetchAndSubscribe();
+    fetchAndSubscribe();
+
     return () => {
-      unsubscribe.then((fn) => fn?.());
+      isActive = false;
+      if (channel) {
+        channel.unsubscribe();
+      }
     };
   }, [conversationId]);
 

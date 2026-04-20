@@ -1089,7 +1089,24 @@ export function AdminDashboard() {
               {selectedPendingReport.image_url && (
                 <div>
                   <p className="text-gray-400 text-sm mb-2">Image</p>
-                  <img src={selectedPendingReport.image_url} alt={selectedPendingReport.title} className="w-full rounded-lg max-h-96 object-cover" />
+                  <button
+                    onClick={() => {
+                      setSelectedImageUrl(selectedPendingReport.image_url);
+                      setImageViewerOpen(true);
+                    }}
+                    className="w-full rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity group"
+                  >
+                    <img 
+                      src={selectedPendingReport.image_url} 
+                      alt={selectedPendingReport.title} 
+                      className="w-full max-h-96 object-cover group-hover:scale-105 transition-transform" 
+                    />
+                    {(selectedPendingReport.image_urls && selectedPendingReport.image_urls.length > 1) && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white font-medium">
+                        {selectedPendingReport.image_urls.length} photos
+                      </div>
+                    )}
+                  </button>
                 </div>
               )}
 
@@ -1396,12 +1413,22 @@ export function AdminDashboard() {
       )}
 
       {/* ── Image Viewer Modal ── */}
-      <ImageViewerModal
-        isOpen={imageViewerOpen}
-        imageUrl={selectedImageUrl}
-        title="Report Image"
-        onClose={() => setImageViewerOpen(false)}
-      />
+      {selectedReport ? (
+        <ImageViewerModal
+          isOpen={imageViewerOpen}
+          imageUrl={selectedImageUrl}
+          imageUrls={selectedReport.image_urls}
+          title={selectedReport.title || "Report Image"}
+          onClose={() => setImageViewerOpen(false)}
+        />
+      ) : (
+        <ImageViewerModal
+          isOpen={imageViewerOpen}
+          imageUrl={selectedImageUrl}
+          title="Report Image"
+          onClose={() => setImageViewerOpen(false)}
+        />
+      )}
 
       {/* ── Report Detail Modal ── */}
       {reportDetailOpen && selectedReport && (
@@ -1480,11 +1507,24 @@ export function AdminDashboard() {
               {selectedReport.image_url && (
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-2">Report Image</p>
-                  <img
-                    src={selectedReport.image_url}
-                    alt="Report"
-                    className="w-full rounded-lg max-h-64 object-cover border border-gray-200"
-                  />
+                  <button
+                    onClick={() => {
+                      setSelectedImageUrl(selectedReport.image_url);
+                      setImageViewerOpen(true);
+                    }}
+                    className="w-full rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity group"
+                  >
+                    <img
+                      src={selectedReport.image_url}
+                      alt="Report"
+                      className="w-full max-h-64 object-cover border border-gray-200 group-hover:scale-105 transition-transform"
+                    />
+                    {(selectedReport.image_urls && selectedReport.image_urls.length > 1) && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white font-medium">
+                        {selectedReport.image_urls.length} photos
+                      </div>
+                    )}
+                  </button>
                 </div>
               )}
 

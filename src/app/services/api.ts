@@ -141,6 +141,7 @@ export interface Report {
   avatar: string;
   description: string;
   image_url: string | null;
+  image_urls?: string[] | null;
   verified: boolean;
   comments: number;
   upvotes: number;
@@ -392,8 +393,41 @@ export interface UserProfile {
 
 // ─── Read API functions ───────────────────────────────────────────────────────
 
+// Helper function to parse images_json from reports
+function parseReportImages(report: any): Report {
+  const parsed = { ...report };
+  
+  // Try to parse images_json if it exists
+  if (report.images_json && typeof report.images_json === 'string') {
+    try {
+      parsed.image_urls = JSON.parse(report.images_json);
+    } catch (err) {
+      console.warn('[API] Failed to parse images_json:', err);
+    }
+  }
+  
+  // If we have image_urls array from DB, use that (preferred)
+  if (report.image_urls && Array.isArray(report.image_urls)) {
+    parsed.image_urls = report.image_urls;
+  }
+  
+  // If we only have single image_url, create array from it
+  if (!parsed.image_urls && report.image_url) {
+    parsed.image_urls = [report.image_url];
+  }
+  
+  return parsed;
+}
+
 export async function fetchReports(): Promise<ApiResponse<Report[]>> {
-  return apiFetch<Report[]>("/reports");
+  const response = await apiFetch<Report[]>("/reports");
+  
+  // Parse images_json for each report
+  if (response.data && Array.isArray(response.data)) {
+    response.data = response.data.map(report => parseReportImages(report));
+  }
+  
+  return response;
 }
 
 export async function fetchComments(reportId: string): Promise<ApiResponse<Comment[]>> {
@@ -512,6 +546,7 @@ export async function createReport(data: {
   location_lat?: number;
   location_lng?: number;
   image_url?: string | null;
+  image_urls?: string[];
   admin_notes?: string;
 }): Promise<ApiResponse<Report>> {
   // Ensure user is authenticated before creating report
@@ -534,7 +569,13 @@ export async function updateReportStatus(
     verified?: boolean;
   }
 ): Promise<ApiResponse<Report>> {
-  return apiFetch<Report>(`/reports/${id}`, { method: "PUT", body: JSON.stringify(data) }, true);
+  const response = await apiFetch<Report>(`/reports/${id}`, { method: "PUT", body: JSON.stringify(data) }, true);
+  
+  if (response.data) {
+    response.data = parseReportImages(response.data);
+  }
+  
+  return response;
 }
 
 /** Update a report (status, etc.) */
@@ -542,7 +583,13 @@ export async function updateReport(
   id: string,
   data: Partial<Report>
 ): Promise<ApiResponse<Report>> {
-  return apiFetch<Report>(`/reports/${id}`, { method: "PUT", body: JSON.stringify(data) }, true);
+  const response = await apiFetch<Report>(`/reports/${id}`, { method: "PUT", body: JSON.stringify(data) }, true);
+  
+  if (response.data) {
+    response.data = parseReportImages(response.data);
+  }
+  
+  return response;
 }
 
 /** Delete a report */
@@ -552,17 +599,29 @@ export async function deleteReport(id: string): Promise<ApiResponse<{ success: b
 
 /** Admin: Get pending verification reports */
 export async function fetchPendingReports(): Promise<ApiResponse<Report[]>> {
-  return apiFetch<Report[]>(`/admin/reports/pending`);
+  const response = await apiFetch<Report[]>(`/admin/reports/pending`);
+  
+  if (response.data && Array.isArray(response.data)) {
+    response.data = response.data.map(report => parseReportImages(report));
+  }
+  
+  return response;
 }
 
 /** Admin: Approve a pending report */
 export async function approveReport(
   id: string
 ): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
-  return apiFetch<{ success: boolean; message: string; report: Report }>(
+  const response = await apiFetch<{ success: boolean; message: string; report: Report }>(
     `/admin/reports/${id}/approve`,
     { method: "POST", body: JSON.stringify({}) }
   );
+  
+  if (response.data?.report) {
+    response.data.report = parseReportImages(response.data.report);
+  }
+  
+  return response;
 }
 
 /** Admin: Reject a pending report */
@@ -570,10 +629,16 @@ export async function rejectReport(
   id: string,
   reason: string
 ): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
-  return apiFetch<{ success: boolean; message: string; report: Report }>(
+  const response = await apiFetch<{ success: boolean; message: string; report: Report }>(
     `/admin/reports/${id}/reject`,
     { method: "POST", body: JSON.stringify({ reason }) }
   );
+  
+  if (response.data?.report) {
+    response.data.report = parseReportImages(response.data.report);
+  }
+  
+  return response;
 }
 
 /** Admin: Toggle anonymous flag on a report */
@@ -588,7 +653,13 @@ export async function toggleAnonymousReport(
 
 /** Admin: Get submitted patrol resolutions awaiting verification */
 export async function fetchSubmittedReports(): Promise<ApiResponse<Report[]>> {
-  return apiFetch<Report[]>(`/admin/patrol-resolutions/pending`);
+  const response = await apiFetch<Report[]>(`/admin/patrol-resolutions/pending`);
+  
+  if (response.data && Array.isArray(response.data)) {
+    response.data = response.data.map(report => parseReportImages(report));
+  }
+  
+  return response;
 }
 
 /** Admin: Approve a submitted patrol resolution */
@@ -596,10 +667,16 @@ export async function approvePatrolResolution(
   id: string,
   adminNotes?: string
 ): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
-  return apiFetch<{ success: boolean; message: string; report: Report }>(
+  const response = await apiFetch<{ success: boolean; message: string; report: Report }>(
     `/admin/patrol-resolutions/${id}/verify`,
     { method: "POST", body: JSON.stringify({ approved: true, adminNotes }) }
   );
+  
+  if (response.data?.report) {
+    response.data.report = parseReportImages(response.data.report);
+  }
+  
+  return response;
 }
 
 /** Admin: Reject a submitted patrol resolution */
@@ -607,10 +684,16 @@ export async function rejectPatrolResolution(
   id: string,
   adminNotes?: string
 ): Promise<ApiResponse<{ success: boolean; message: string; report: Report }>> {
-  return apiFetch<{ success: boolean; message: string; report: Report }>(
+  const response = await apiFetch<{ success: boolean; message: string; report: Report }>(
     `/admin/patrol-resolutions/${id}/verify`,
     { method: "POST", body: JSON.stringify({ approved: false, adminNotes }) }
   );
+  
+  if (response.data?.report) {
+    response.data.report = parseReportImages(response.data.report);
+  }
+  
+  return response;
 }
 
 /** Post a comment on a report */
