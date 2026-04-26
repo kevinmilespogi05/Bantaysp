@@ -1,10 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion } from "motion/react";
 import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useAuth, type UserRole } from "../context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { BantayLogo } from "../components/ui/BantayLogo";
+
+// ── Animated counter hook ────────────────────────────────────────────────────
+function useCountUp(target: number | null, duration = 1200) {
+  const [count, setCount] = useState(0);
+  const frameRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (target === null) return;
+    const start = performance.now();
+    const from = 0;
+    const animate = (now: number) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(from + (target - from) * eased));
+      if (progress < 1) frameRef.current = requestAnimationFrame(animate);
+    };
+    frameRef.current = requestAnimationFrame(animate);
+    return () => { if (frameRef.current) cancelAnimationFrame(frameRef.current); };
+  }, [target, duration]);
+  return count;
+}
+
+// ── Types ────────────────────────────────────────────────────────────────────
+interface LiveStats {
+  activeReports: number;
+  resolved: number;
+  citizens: number;
+  responseRate: number;
+}
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -14,6 +44,58 @@ export function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // ── Live stats ─────────────────────────────────────────────────────────────
+  const [stats, setStats] = useState<LiveStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const activeReportsCount = useCountUp(stats?.activeReports ?? null);
+  const resolvedCount = useCountUp(stats?.resolved ?? null);
+  const citizensCount = useCountUp(stats?.citizens ?? null);
+  const responseRateCount = useCountUp(stats?.responseRate ?? null);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        // Fetch all in parallel
+        const [reportsRes, profilesRes] = await Promise.all([
+          supabase
+            .from("reports")
+            .select("status", { count: "exact", head: false }),
+          supabase
+            .from("user_profiles")
+            .select("id", { count: "exact", head: true }),
+        ]);
+
+        const allReports = reportsRes.data ?? [];
+        const totalReports = allReports.length;
+        const resolvedReports = allReports.filter(
+          (r: any) => r.status === "resolved"
+        ).length;
+        // Active = any report that is not resolved/rejected
+        const activeReports = allReports.filter(
+          (r: any) => !["resolved", "rejected"].includes(r.status)
+        ).length;
+        const citizens = profilesRes.count ?? 0;
+        const responseRate =
+          totalReports > 0
+            ? Math.round((resolvedReports / totalReports) * 100)
+            : 0;
+
+        setStats({
+          activeReports,
+          resolved: resolvedReports,
+          citizens,
+          responseRate,
+        });
+      } catch (err) {
+        console.warn("[LoginPage] Failed to load live stats:", err);
+      } finally {
+        setStatsLoading(false);
+      }
+    }
+    loadStats();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,18 +156,55 @@ export function LoginPage() {
           </p>
 
           <div className="mt-12 grid grid-cols-2 gap-4">
-            {[
-              { label: "Active Reports", value: "2,847" },
-              { label: "Issues Resolved", value: "2,391" },
-              { label: "Active Citizens", value: "1,203" },
-              { label: "Response Rate", value: "84%" },
-            ].map((s) => (
+            {([
+              {
+                label: "Active Reports",
+                value: statsLoading ? null : activeReportsCount,
+                suffix: "",
+              },
+              {
+                label: "Issues Resolved",
+                value: statsLoading ? null : resolvedCount,
+                suffix: "",
+              },
+              {
+                label: "Active Citizens",
+                value: statsLoading ? null : citizensCount,
+                suffix: "",
+              },
+              {
+                label: "Response Rate",
+                value: statsLoading ? null : responseRateCount,
+                suffix: "%",
+              },
+            ] as { label: string; value: number | null; suffix: string }[]).map((s) => (
               <div key={s.label} className="bg-white/10 rounded-2xl p-4">
-                <div className="text-white font-bold text-xl">{s.value}</div>
+                {s.value === null ? (
+                  // Skeleton shimmer while loading
+                  <div
+                    className="h-7 w-16 rounded-md mb-1"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, rgba(255,255,255,0.12) 25%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.12) 75%)",
+                      backgroundSize: "200% 100%",
+                      animation: "shimmer 1.4s infinite",
+                    }}
+                  />
+                ) : (
+                  <div className="text-white font-bold text-xl">
+                    {s.value.toLocaleString()}{s.suffix}
+                  </div>
+                )}
                 <div className="text-white/60 text-xs">{s.label}</div>
               </div>
             ))}
           </div>
+          <style>{`
+            @keyframes shimmer {
+              0%   { background-position: 200% 0; }
+              100% { background-position: -200% 0; }
+            }
+          `}</style>
         </div>
       </div>
 

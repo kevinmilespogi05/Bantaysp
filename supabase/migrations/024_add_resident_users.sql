@@ -42,10 +42,10 @@ WITH new_users AS (
     (gen_random_uuid(), 'Amelita', 'Domingo', 'amelita.domingo@resident.local', NULL, 'resident', 'San Pablo', 'AD', true, true, 0, 0, 'Member', '', 'verified', now()),
     (gen_random_uuid(), 'Angelo', 'Amplogio', 'angelo.amplogio@resident.local', NULL, 'resident', 'San Pablo', 'AA', true, true, 0, 0, 'Member', '', 'verified', now()),
     (gen_random_uuid(), 'John', 'Lloyd Aranca', 'johnlloyd.aranca@resident.local', NULL, 'resident', 'San Pablo', 'JLA', true, true, 0, 0, 'Member', '', 'verified', now()),
-    (gen_random_uuid(), 'Albert', 'Araniego', 'albert.araniego@resident.local', NULL, 'resident', 'San Pablo', 'AA2', true, true, 0, 0, 'Member', '', 'verified', now()),
+    (gen_random_uuid(), 'Albert', 'Araniego', 'albert.araniego@resident.local', NULL, 'resident', 'San Pablo', 'AA', true, true, 0, 0, 'Member', '', 'verified', now()),
     (gen_random_uuid(), 'Cleo', 'Pascual', 'cleo.pascual@resident.local', NULL, 'resident', 'San Pablo', 'CP', true, true, 0, 0, 'Member', '', 'verified', now()),
     (gen_random_uuid(), 'Gary', 'Dela Cruz', 'gary.delacruz@resident.local', NULL, 'resident', 'San Pablo', 'GDC', true, true, 0, 0, 'Member', '', 'verified', now()),
-    (gen_random_uuid(), 'Andrei', 'Acluba', 'andrei.acluba@resident.local', NULL, 'resident', 'San Pablo', 'AA3', true, true, 0, 0, 'Member', '', 'verified', now()),
+    (gen_random_uuid(), 'Andrei', 'Acluba', 'andrei.acluba@resident.local', NULL, 'resident', 'San Pablo', 'AA', true, true, 0, 0, 'Member', '', 'verified', now()),
     (gen_random_uuid(), 'Irish', 'Doctolero', 'irish.doctolero@resident.local', NULL, 'resident', 'San Pablo', 'ID', true, true, 0, 0, 'Member', '', 'verified', now()),
     (gen_random_uuid(), 'Luisa', 'Tiburcio', 'luisa.tiburcio@resident.local', NULL, 'resident', 'San Pablo', 'LT', true, true, 0, 0, 'Member', '', 'verified', now())
   RETURNING id
