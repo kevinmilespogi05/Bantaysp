@@ -1006,25 +1006,33 @@ app.get("/reports", async (req, res) => {
 
     if (error) throw error;
 
-    // Fetch patrol unit names for assigned reports
-    const reportsWithPatrolNames = await Promise.all(
+    // Process reports to handle anonymity and fetch patrol unit names
+    const processedReports = await Promise.all(
       (reports || []).map(async (report) => {
+        // Enforce anonymity: if is_anonymous is true, mask the reporter name
+        const reporterName = report.is_anonymous ? "Anonymous" : (report.reporter || "Anonymous Resident");
+        const reporterAvatar = report.is_anonymous ? "AN" : (report.avatar || "");
+
+        let assignedPatrolName = null;
         if (report.patrol_assigned_to) {
           const { data: patrolUnit } = await supabase
             .from("patrol_units")
             .select("name")
             .eq("id", `patrol-${report.patrol_assigned_to}`)
             .single();
-          return {
-            ...report,
-            assigned_patrol_name: patrolUnit?.name || null,
-          };
+          assignedPatrolName = patrolUnit?.name || null;
         }
-        return { ...report, assigned_patrol_name: null };
+
+        return {
+          ...report,
+          reporter: reporterName,
+          avatar: reporterAvatar,
+          assigned_patrol_name: assignedPatrolName,
+        };
       })
     );
 
-    res.json(reportsWithPatrolNames || []);
+    res.json(processedReports || []);
   } catch (err) {
     console.error(`[Reports] Error:`, err);
     res.status(500).json({ error: "Failed to fetch reports" });
@@ -4025,7 +4033,7 @@ app.get("/patrol/available", async (req, res) => {
         
         // Check if anonymous flag is set
         if (r.is_anonymous) {
-          reporterName = "Anonymous Resident";
+          reporterName = "Anonymous";
         } else if (r.user_id) {
           const { data: profile } = await supabase
             .from("user_profiles")
@@ -4089,7 +4097,7 @@ app.get("/patrol/case/:id", async (req, res) => {
     
     // Check if anonymous flag is set
     if (report.is_anonymous) {
-      reporterName = "Anonymous Resident";
+      reporterName = "Anonymous";
     } else if (report.user_id) {
       const { data: profile } = await supabase
         .from("user_profiles")

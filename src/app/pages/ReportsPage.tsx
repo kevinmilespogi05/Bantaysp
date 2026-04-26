@@ -359,6 +359,10 @@ export function ReportsPage() {
 
                     <div className="flex items-center gap-1.5 mb-2">
                       <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 text-xs">{report.category}</span>
+                      <span className="text-gray-400 text-[10px]">·</span>
+                      <span className="text-gray-500 text-xs truncate max-w-[100px]">
+                        {report.is_anonymous ? "Anonymous" : report.reporter}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-1.5 text-gray-400 text-xs mb-3">
@@ -429,7 +433,9 @@ export function ReportsPage() {
                 <div className="p-6">
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div>
-                      <div className="text-gray-400 text-xs mb-1">{selectedReport.id} · {selectedReport.category}</div>
+                      <div className="text-gray-400 text-xs mb-1">
+                        {selectedReport.id} · {selectedReport.category} · Reported by {selectedReport.is_anonymous ? "Anonymous" : selectedReport.reporter}
+                      </div>
                       <h2 className="text-gray-900 font-semibold" style={{ fontSize: "1.1rem" }}>{selectedReport.title}</h2>
                     </div>
                     <button onClick={() => setSelectedReport(null)} className="p-2 rounded-xl hover:bg-gray-100 shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center">

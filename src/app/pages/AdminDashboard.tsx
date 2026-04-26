@@ -142,7 +142,7 @@ export function AdminDashboard() {
   const filteredReports = (reports ?? []).filter(
     (r) =>
       r.title.toLowerCase().includes(reportSearch.toLowerCase()) ||
-      r.reporter.toLowerCase().includes(reportSearch.toLowerCase())
+      (r.is_anonymous ? "anonymous" : r.reporter).toLowerCase().includes(reportSearch.toLowerCase())
   );
 
   const handleStatusChange = async (reportId: string, status: Report["status"]) => {
@@ -688,7 +688,9 @@ export function AdminDashboard() {
                             <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
                               {r.avatar}
                             </div>
-                            <span className="text-gray-700 text-sm">{r.reporter}</span>
+                            <span className="text-gray-700 text-sm">
+                              {r.is_anonymous ? "Anonymous" : r.reporter}
+                            </span>
                           </div>
                         </td>
                         <td className="px-5 py-3.5">
@@ -1486,7 +1488,9 @@ export function AdminDashboard() {
                     <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: "#800000" }}>
                       {selectedReport.avatar}
                     </div>
-                    <span className="text-sm font-medium text-gray-900">{selectedReport.reporter}</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {selectedReport.is_anonymous ? "Anonymous" : selectedReport.reporter}
+                    </span>
                   </div>
                 </div>
                 <div>
