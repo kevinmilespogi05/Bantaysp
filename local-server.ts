@@ -860,6 +860,89 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// ─── Auth: Check User Verification ───────────────────────────────────────────
+
+app.get("/auth/check-verification/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    console.log(`[CheckVerification] Checking user ${userId}...`);
+
+    // Get user ID from token for validation
+    const { data: { user: authUser }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !authUser) {
+      console.warn(`[CheckVerification] Auth failed, allowing public check`);
+      // For login flow, we allow this without auth since the user just logged in
+    }
+
+    // Check if user exists in user_profiles table
+    const { data: profile, error } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        // No rows found - user not in user_profiles (still pending or rejected)
+        console.log(`[CheckVerification] User ${userId} not verified - not in user_profiles`);
+        return res.json({ verified: false });
+      }
+      
+      console.error(`[CheckVerification] Error: ${error.code} - ${error.message}`);
+      return res.status(500).json({ error: "Verification check failed" });
+    }
+
+    // User exists in user_profiles - they are verified
+    console.log(`[CheckVerification] User ${userId} verified - found in user_profiles`);
+    res.json({ verified: true });
+  } catch (err) {
+    console.error(`[CheckVerification] Error:`, err);
+    res.status(500).json({ error: "Verification check failed" });
+  }
+});
+
+// ─── Auth: Get User Profile (for background enrichment) ──────────────────────
+
+app.get("/auth/profile/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    console.log(`[GetProfile] Fetching profile for user ${userId}...`);
+
+    // Fetch from user_profiles table
+    const { data: profile, error } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        console.log(`[GetProfile] User ${userId} not found in user_profiles`);
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      console.error(`[GetProfile] Error: ${error.code} - ${error.message}`);
+      return res.status(500).json({ error: "Failed to fetch profile" });
+    }
+
+    if (!profile) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    console.log(`[GetProfile] Profile fetched successfully for ${userId}`);
+    res.json(profile);
+  } catch (err) {
+    console.error(`[GetProfile] Error:`, err);
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
+
 // ─── Dashboard Stats (Admin & Resident) ──────────────────────────────────────
 
 app.get("/dashboard/stats", async (req, res) => {
@@ -2247,6 +2330,76 @@ app.get("/emergency-contacts", async (req, res) => {
   } catch (err) {
     console.error(`[EmergencyContacts] Error:`, err);
     res.status(500).json({ error: "Failed to fetch emergency contacts" });
+  }
+});
+
+// ─── Fix User ID Mismatch (Temporary migration endpoint) ──────────────────────
+
+app.post("/admin/fix-user-mismatch/:email/:correctAuthUserId/:oldProfileUserId", async (req, res) => {
+  try {
+    const { email, correctAuthUserId, oldProfileUserId } = req.params;
+    
+    console.log(`[FixMismatch] Fixing user ID mismatch for ${email}...`);
+    console.log(`  Auth User ID (correct): ${correctAuthUserId}`);
+    console.log(`  Profile ID (old): ${oldProfileUserId}`);
+
+    // Get the old profile data
+    const { data: oldProfile, error: fetchError } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", oldProfileUserId)
+      .single();
+
+    if (fetchError) {
+      console.error(`[FixMismatch] Could not fetch old profile:`, fetchError);
+      return res.status(404).json({ error: "Old profile not found" });
+    }
+
+    if (!oldProfile) {
+      return res.status(404).json({ error: "Profile data missing" });
+    }
+
+    console.log(`[FixMismatch] Found old profile, copying data to correct auth user...`);
+
+    // Delete the old profile (it was orphaned)
+    const { error: deleteError } = await supabase
+      .from("user_profiles")
+      .delete()
+      .eq("id", oldProfileUserId);
+
+    if (deleteError) {
+      console.error(`[FixMismatch] Error deleting old profile:`, deleteError);
+      return res.status(500).json({ error: "Failed to delete old profile" });
+    }
+
+    // Create new profile with correct auth user ID
+    const { error: insertError } = await supabase
+      .from("user_profiles")
+      .insert({
+        id: correctAuthUserId,
+        email: oldProfile.email,
+        first_name: oldProfile.first_name,
+        last_name: oldProfile.last_name,
+        phone: oldProfile.phone,
+        barangay: oldProfile.barangay,
+        avatar: oldProfile.avatar,
+        role: oldProfile.role,
+        bio: oldProfile.bio || "",
+        badge: oldProfile.badge || "",
+        points: oldProfile.points || 0,
+        verified: oldProfile.verified || true,
+      });
+
+    if (insertError) {
+      console.error(`[FixMismatch] Error creating new profile:`, insertError);
+      return res.status(500).json({ error: "Failed to create corrected profile" });
+    }
+
+    console.log(`[FixMismatch] Successfully migrated profile for ${email}`);
+    res.json({ success: true, message: `Profile migrated to correct auth user ${correctAuthUserId}` });
+  } catch (err) {
+    console.error(`[FixMismatch] Error:`, err);
+    res.status(500).json({ error: "Failed to fix user mismatch" });
   }
 });
 

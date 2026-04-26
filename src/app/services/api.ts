@@ -1038,27 +1038,8 @@ export async function resendOtp(data: ResendOtpData): Promise<ApiResponse<Resend
 
 /** Check if user is verified (exists in user_profiles table) */
 export async function checkUserVerification(userId: string): Promise<ApiResponse<{ verified: boolean }>> {
-  try {
-    const { data, error } = await supabase
-      .from("user_profiles")
-      .select("id")
-      .eq("id", userId)
-      .single();
-
-    if (error) {
-      // User doesn't exist in user_profiles (still pending verification)
-      console.log(`[API] User ${userId} not verified - not in user_profiles`);
-      return { data: { verified: false }, error: null };
-    }
-
-    // User exists in user_profiles - they are verified
-    console.log(`[API] User ${userId} verified - found in user_profiles`);
-    return { data: { verified: true }, error: null };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Failed to check verification";
-    console.error("[API] Verification check error:", msg);
-    return { data: { verified: false }, error: msg };
-  }
+  // Use the backend API to check verification (passes auth token properly)
+  return apiFetch<{ verified: boolean }>(`/auth/check-verification/${userId}`, { method: "GET" });
 }
 
 /** Approve a pending user (move from pending_verification to user_profiles) */

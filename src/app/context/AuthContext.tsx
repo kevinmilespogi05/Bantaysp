@@ -75,16 +75,31 @@ async function enrichUserWithDatabaseProfile(
       userId: sessionUser.id,
     });
 
-    // Query user_profiles with 5-second timeout
+    // Get access token for authenticated request
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.access_token) {
+      console.warn("[AuthContext] No session token available for enrichment");
+      return null;
+    }
+
+    const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    
+    // Call backend API to fetch profile (with 5-second timeout)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
-      const { data: profile, error } = await supabase
-        .from("user_profiles")
-        .select("*")
-        .eq("id", sessionUser.id)
-        .single();
+      const response = await fetch(
+        `${BACKEND_URL}/auth/profile/${sessionUser.id}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+          signal: controller.signal,
+        }
+      );
 
       clearTimeout(timeoutId);
 
@@ -93,21 +108,22 @@ async function enrichUserWithDatabaseProfile(
         return null;
       }
 
-      if (error) {
-        if (error.code !== "PGRST116") {
-          // PGRST116 = no rows (user doesn't exist in user_profiles yet)
-          console.warn("[AuthContext] Database fetch failed:", {
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log("[AuthContext] User not found in user_profiles (pending approval):", {
             userId: sessionUser.id,
-            errorCode: error.code,
-            message: error.message,
           });
         } else {
-          console.log("[AuthContext] User not yet in user_profiles (pending approval):", {
+          console.warn("[AuthContext] Profile fetch failed:", {
             userId: sessionUser.id,
+            status: response.status,
+            statusText: response.statusText,
           });
         }
         return null;
       }
+
+      const profile = await response.json();
 
       if (!profile) {
         console.warn("[AuthContext] No profile data returned");
@@ -133,11 +149,11 @@ async function enrichUserWithDatabaseProfile(
       clearTimeout(timeoutId);
       
       if (err instanceof Error && err.name === "AbortError") {
-        console.warn("[AuthContext] Database enrichment timed out (5s):", {
+        console.warn("[AuthContext] Profile enrichment timed out (5s):", {
           userId: sessionUser.id,
         });
       } else {
-        console.error("[AuthContext] Database enrichment error:", {
+        console.error("[AuthContext] Profile enrichment error:", {
           userId: sessionUser.id,
           error: err instanceof Error ? err.message : String(err),
         });
