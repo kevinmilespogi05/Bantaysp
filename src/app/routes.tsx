@@ -3,9 +3,11 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { PatrolLayout } from "./components/layout/PatrolLayout";
 import { RoleGuard } from "./components/layout/RoleGuard";
 import { RoleBasedRedirect } from "./components/layout/RoleBasedRedirect";
+import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { AccessDeniedPage } from "./pages/AccessDeniedPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { CreateReportPage } from "./pages/CreateReportPage";
@@ -30,11 +32,17 @@ export const router = createBrowserRouter([
   { path: "/",         Component: LandingPage },
   { path: "/login",    Component: LoginPage },
   { path: "/register", Component: RegisterPage },
+  { path: "/access-denied", Component: AccessDeniedPage },
 
   // ─── Resident & Admin App ─────────────────────────────────────
+  // Protected by ProtectedRoute - requires authentication
   {
     path: "/app",
-    Component: AppLayout,
+    element: (
+      <ProtectedRoute>
+        <AppLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { index: true, element: <RoleBasedRedirect /> },
 
@@ -78,14 +86,15 @@ export const router = createBrowserRouter([
   },
 
   // ─── Patrol App ───────────────────────────────────────────────
-  // Patrol officers have their own dark UI (PatrolLayout).
-  // Non-patrol users navigating here are redirected.
+  // Protected by ProtectedRoute - requires authentication and patrol/admin role
   {
     path: "/app/patrol",
     element: (
-      <RoleGuard allow={["patrol", "admin"]} fallback="/app/dashboard">
-        <PatrolLayout />
-      </RoleGuard>
+      <ProtectedRoute requiredRoles={["patrol", "admin"]}>
+        <RoleGuard allow={["patrol", "admin"]} fallback="/app/dashboard">
+          <PatrolLayout />
+        </RoleGuard>
+      </ProtectedRoute>
     ),
     children: [
       { index: true, element: <Navigate to="/app/patrol/dashboard" replace /> },

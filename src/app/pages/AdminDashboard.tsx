@@ -157,12 +157,16 @@ export function AdminDashboard() {
     if (!confirmAction?.reportId) return;
     setUpdatingId(confirmAction.reportId);
     try {
-      await deleteReport(confirmAction.reportId);
-      refetchReports();
-      retryStats();
-      showToast("Report deleted successfully", "success");
+      const result = await deleteReport(confirmAction.reportId);
+      if (result.data?.success) {
+        showToast("Report deleted successfully", "success");
+        refetchReports();
+        retryStats();
+      } else {
+        showToast(`Failed to delete report: ${result.error}`, "error");
+      }
     } catch (err) {
-      showToast("Failed to delete report", "error");
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to delete report"}`, "error");
     }
     setUpdatingId(null);
     setConfirmOpen(false);

@@ -268,6 +268,104 @@ async function cleanupStalePendings(): Promise<void> {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 /**
+ * Authentication & Authorization Helpers
+ * 
+ * Validates bearer tokens and user permissions on every protected request
+ */
+
+interface TokenValidationResult {
+  valid: boolean;
+  userId?: string;
+  error?: string;
+  statusCode?: number;
+}
+
+/**
+ * Validates a Bearer token and extracts the user ID
+ */
+async function validateToken(authHeader: string | undefined): Promise<TokenValidationResult> {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    console.warn("[Auth] ⚠️ No Bearer token provided");
+    return { valid: false, error: "Missing authentication token", statusCode: 401 };
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.warn("[Auth] ⚠️ Token validation failed:", error?.message);
+      return { valid: false, error: "Invalid or expired token", statusCode: 401 };
+    }
+
+    console.log(`[Auth] ✅ Token validated for user ${user.id.substring(0, 8)}...`);
+    return { valid: true, userId: user.id };
+  } catch (err) {
+    console.error("[Auth] ❌ Token validation error:", err);
+    return { valid: false, error: "Token validation failed", statusCode: 401 };
+  }
+}
+
+/**
+ * Validates that user has admin role
+ */
+async function validateAdminRole(userId: string): Promise<TokenValidationResult> {
+  try {
+    const { data: userProfile, error } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (error || !userProfile) {
+      console.warn("[Auth] ⚠️ User profile not found:", error?.message);
+      return { valid: false, error: "User profile not found", statusCode: 403 };
+    }
+
+    if (userProfile.role !== "admin") {
+      console.warn(`[Auth] ⚠️ Access denied - User role is '${userProfile.role}', admin required`);
+      return { valid: false, error: "Admin access required", statusCode: 403 };
+    }
+
+    console.log(`[Auth] ✅ Admin role confirmed for user ${userId.substring(0, 8)}...`);
+    return { valid: true, userId };
+  } catch (err) {
+    console.error("[Auth] ❌ Admin role validation error:", err);
+    return { valid: false, error: "Role validation failed", statusCode: 500 };
+  }
+}
+
+/**
+ * Validates that user has patrol or admin role
+ */
+async function validatePatrolRole(userId: string): Promise<TokenValidationResult> {
+  try {
+    const { data: userProfile, error } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (error || !userProfile) {
+      console.warn("[Auth] ⚠️ User profile not found:", error?.message);
+      return { valid: false, error: "User profile not found", statusCode: 403 };
+    }
+
+    if (!["patrol", "admin"].includes(userProfile.role)) {
+      console.warn(`[Auth] ⚠️ Access denied - User role is '${userProfile.role}', patrol/admin required`);
+      return { valid: false, error: "Patrol/Admin access required", statusCode: 403 };
+    }
+
+    console.log(`[Auth] ✅ Patrol/Admin role confirmed for user ${userId.substring(0, 8)}...`);
+    return { valid: true, userId };
+  } catch (err) {
+    console.error("[Auth] ❌ Role validation error:", err);
+    return { valid: false, error: "Role validation failed", statusCode: 500 };
+  }
+}
+
+/**
  * POST /register
  * Step 1: Validate personal info (NO database insert yet)
  * OTP will be generated and sent in Step 3 (/generate-otp)
@@ -808,17 +906,42 @@ app.get("/dashboard/stats", async (req, res) => {
 
 app.get("/reports", async (req, res) => {
   try {
-    console.log(`[Reports] Fetching reports...`);
+    // Validate authentication token
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid) {
+      console.warn(`[Reports] 🚫 Unauthorized GET /reports attempt`);
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error });
+    }
+
+    console.log(`[Reports] Fetching reports for user ${authValidation.userId?.substring(0, 8)}...`);
 
     const { data: reports, error } = await supabase
       .from("reports")
-      .select("id, title, category, status, location, timestamp, created_at, reporter, avatar, description, image_url, verified, comments, upvotes, is_anonymous, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, resolved_by, resolved_at, admin_notes, user_id, resolution_notes, resolution_evidence_url")
+      .select("id, title, category, status, location, timestamp, created_at, reporter, avatar, description, image_url, verified, comments, upvotes, is_anonymous, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, resolved_by, resolved_at, admin_notes, user_id, resolution_notes, resolution_evidence_url, patrol_assigned_to")
       .order("created_at", { ascending: false })
       .limit(500);
 
     if (error) throw error;
 
-    res.json(reports || []);
+    // Fetch patrol unit names for assigned reports
+    const reportsWithPatrolNames = await Promise.all(
+      (reports || []).map(async (report) => {
+        if (report.patrol_assigned_to) {
+          const { data: patrolUnit } = await supabase
+            .from("patrol_units")
+            .select("name")
+            .eq("id", `patrol-${report.patrol_assigned_to}`)
+            .single();
+          return {
+            ...report,
+            assigned_patrol_name: patrolUnit?.name || null,
+          };
+        }
+        return { ...report, assigned_patrol_name: null };
+      })
+    );
+
+    res.json(reportsWithPatrolNames || []);
   } catch (err) {
     console.error(`[Reports] Error:`, err);
     res.status(500).json({ error: "Failed to fetch reports" });
@@ -845,74 +968,63 @@ app.post("/reports", async (req, res) => {
       return res.status(400).json({ error: "Description must be at least 10 characters long" });
     }
 
-    // Extract and verify access token
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.replace("Bearer ", "");
+    // Validate authentication token (required for report creation)
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid || !authValidation.userId) {
+      console.warn(`[CreateReport] 🚫 Unauthorized POST /reports attempt - ${authValidation.error}`);
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error });
+    }
 
+    const userId = authValidation.userId;
     let reporterName = "Anonymous Resident";
     let reporterAvatar = "";
-    let userId: string | null = null;
 
-    // Try to get user info from token
-    if (token) {
-      try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        
-        if (user && !userError) {
-          userId = user.id;
-          console.log(`[CreateReport] User ${user.id} creating report`);
-          
-          // Get user profile for name and avatar
-          const { data: profile, error: profileError } = await supabase
-            .from("user_profiles")
-            .select("first_name, last_name, avatar")
-            .eq("id", user.id)
-            .single();
+    // Get user profile for name and avatar
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("first_name, last_name, avatar")
+      .eq("id", userId)
+      .single();
 
-          if (profile && !profileError) {
-            reporterName = `${profile.first_name} ${profile.last_name}`;
-            reporterAvatar = profile.avatar || "";
-          }
+    if (profile && !profileError) {
+      reporterName = `${profile.first_name} ${profile.last_name}`;
+      reporterAvatar = profile.avatar || "";
+    }
 
-          // ── Rate Limiting: Check if user has created too many reports in the last hour ──
-          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-          const { count: recentReportCount, error: rateLimitError } = await supabase
-            .from("reports")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", userId)
-            .gte("created_at", oneHourAgo);
+    // ── Rate Limiting: Check if user has created too many reports in the last hour ──
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: recentReportCount, error: rateLimitError } = await supabase
+      .from("reports")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", oneHourAgo);
 
-          if (!rateLimitError && recentReportCount && recentReportCount >= 5) {
-            console.warn(`[CreateReport] Rate limit exceeded for user ${userId}: ${recentReportCount} reports in last hour`);
-            return res.status(429).json({ error: "You've created too many reports recently. Please wait before creating another one." });
-          }
+    if (!rateLimitError && recentReportCount && recentReportCount >= 5) {
+      console.warn(`[CreateReport] Rate limit exceeded for user ${userId}: ${recentReportCount} reports in last hour`);
+      return res.status(429).json({ error: "You've created too many reports recently. Please wait before creating another one." });
+    }
 
-          // ── Duplicate Detection: Check for similar reports in the last 24 hours ──
-          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-          const { data: similarReports, error: dupError } = await supabase
-            .from("reports")
-            .select("id, title, description, category, location")
-            .eq("user_id", userId)
-            .eq("category", category)
-            .gte("created_at", oneDayAgo);
+    // ── Duplicate Detection: Check for similar reports in the last 24 hours ──
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: similarReports, error: dupError } = await supabase
+      .from("reports")
+      .select("id, title, description, category, location")
+      .eq("user_id", userId)
+      .eq("category", category)
+      .gte("created_at", oneDayAgo);
 
-          if (!dupError && similarReports && similarReports.length > 0) {
-            // Check for near-duplicate titles (simple string similarity)
-            const titleLower = title.toLowerCase();
-            for (const existing of similarReports) {
-              const existingTitleLower = existing.title.toLowerCase();
-              // If titles are identical or very similar, likely a duplicate
-              if (titleLower === existingTitleLower) {
-                console.warn(`[CreateReport] Potential duplicate report detected for user ${userId}`);
-                return res.status(400).json({ 
-                  error: "A similar report with this title already exists. Please check existing reports before creating a duplicate." 
-                });
-              }
-            }
-          }
+    if (!dupError && similarReports && similarReports.length > 0) {
+      // Check for near-duplicate titles (simple string similarity)
+      const titleLower = title.toLowerCase();
+      for (const existing of similarReports) {
+        const existingTitleLower = existing.title.toLowerCase();
+        // If titles are identical or very similar, likely a duplicate
+        if (titleLower === existingTitleLower) {
+          console.warn(`[CreateReport] Potential duplicate report detected for user ${userId}`);
+          return res.status(400).json({ 
+            error: "A similar report with this title already exists. Please check existing reports before creating a duplicate." 
+          });
         }
-      } catch (tokenError) {
-        console.warn(`[CreateReport] Could not verify token:`, tokenError);
       }
     }
 
@@ -1013,6 +1125,14 @@ app.post("/reports", async (req, res) => {
 app.get("/reports/:id/comments", async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Validate authentication token
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid) {
+      console.warn(`[GetComments] 🚫 Unauthorized GET /reports/:id/comments attempt for report ${id}`);
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error });
+    }
+
     console.log(`[GetComments] Fetching comments for report: ${id}`);
 
     // Fetch report to check is_anonymous flag
@@ -1101,6 +1221,13 @@ app.post("/reports/:id/comments", async (req, res) => {
     const { id } = req.params;
     const { author, avatar, text } = req.body;
 
+    // Validate authentication token
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid) {
+      console.warn(`[PostComment] 🚫 Unauthorized POST /reports/:id/comments attempt`);
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error });
+    }
+
     if (!author || !text) {
       return res.status(400).json({ error: "Missing required fields: author, text" });
     }
@@ -1143,6 +1270,13 @@ app.post("/reports/:id/upvote", async (req, res) => {
   try {
     const { id } = req.params;
     const { action } = req.body;
+
+    // Validate authentication token
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid || !authValidation.userId) {
+      console.warn(`[PostUpvote] 🚫 Unauthorized POST /reports/:id/upvote attempt`);
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error });
+    }
 
     if (!action || !["add", "remove"].includes(action)) {
       return res.status(400).json({ error: "Invalid action. Must be 'add' or 'remove'" });
@@ -1216,6 +1350,66 @@ app.post("/reports/:id/upvote", async (req, res) => {
   } catch (err) {
     console.error(`[Upvote] Error:`, err);
     res.status(500).json({ error: "Failed to update upvote" });
+  }
+});
+
+/** DELETE /reports/:id - Delete a report (admin only) */
+app.delete("/reports/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Verify user is admin
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { data: userProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !userProfile || userProfile.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    console.log(`[DeleteReport] Admin ${user.id} deleting report ${id}`);
+
+    // First, check if report exists
+    const { data: reportToDelete, error: fetchError } = await supabase
+      .from("reports")
+      .select("id")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !reportToDelete) {
+      console.error(`[DeleteReport] Report not found:`, fetchError);
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    // Delete the report
+    const { error: deleteError } = await supabase
+      .from("reports")
+      .delete()
+      .eq("id", id);
+
+    if (deleteError) {
+      console.error(`[DeleteReport] Error deleting report:`, deleteError);
+      return res.status(500).json({ error: "Failed to delete report" });
+    }
+
+    console.log(`[DeleteReport] ✅ Report ${id} deleted successfully`);
+    res.json({ success: true, message: "Report deleted successfully" });
+  } catch (err) {
+    console.error(`[DeleteReport] Error:`, err);
+    res.status(500).json({ error: "Failed to delete report" });
   }
 });
 

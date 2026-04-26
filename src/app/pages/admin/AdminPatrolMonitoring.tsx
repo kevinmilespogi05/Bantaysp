@@ -962,10 +962,10 @@ export function AdminPatrolMonitoring() {
                 </motion.div>
               )}
 
-              {/* Display reports with status (excluding resolved) */}
-              {reports.filter(r => r.status !== "resolved").length > 0 ? (
+              {/* Display reports with status (excluding resolved and pending_verification) */}
+              {reports.filter(r => r.status !== "resolved" && r.status !== "pending_verification").length > 0 ? (
                 reports
-                  .filter(r => r.status !== "resolved")
+                  .filter(r => r.status !== "resolved" && r.status !== "pending_verification")
                   .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                   .map((report) => {
                     const statusColors: Record<string, { bg: string; text: string; dot: string }> = {

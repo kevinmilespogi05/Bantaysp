@@ -18,7 +18,7 @@ import { ImageViewerModal } from "../components/ui/ImageViewerModal";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-type TabKey = "all" | "approved" | "in_progress" | "accepted" | "submitted" | "resolved" | "rejected";
+type TabKey = "all" | "approved" | "in_progress" | "accepted" | "submitted" | "resolved" | "rejected" | "my_pending_verification";
 
 const tabs: { key: TabKey; label: string; color: string }[] = [
   { key: "all",         label: "All",           color: "#800000" },
@@ -28,6 +28,7 @@ const tabs: { key: TabKey; label: string; color: string }[] = [
   { key: "submitted",   label: "Submitted",     color: "#8b5cf6" },
   { key: "resolved",    label: "Resolved",      color: "#16a34a" },
   { key: "rejected",    label: "Rejected",      color: "#ef4444" },
+  { key: "my_pending_verification", label: "My Pending Verification", color: "#f59e0b" },
 ];
 
 const statusConfig: Record<string, { bg: string; text: string; icon: React.ElementType; label: string }> = {
@@ -116,20 +117,34 @@ export function ReportsPage() {
   // ── Derived filtered list ─────────────────────────────────────────────────
   const filtered = (reports ?? []).filter((r) => {
     const q = localSearch.toLowerCase();
-    const matchTab = activeTab === "all" || r.status === activeTab;
+    const isCurrentUserReport = r.user_id === user.id;
+    
+    let matchTab = false;
+    if (activeTab === "my_pending_verification") {
+      // Only show current user's pending verification reports
+      matchTab = r.status === "pending_verification" && isCurrentUserReport;
+    } else if (activeTab === "all") {
+      // Show all reports EXCEPT pending_verification (which are hidden from other users)
+      matchTab = r.status !== "pending_verification";
+    } else {
+      // Other tabs show only matching status, excluding pending_verification
+      matchTab = r.status === activeTab && r.status !== "pending_verification";
+    }
+    
     const matchSearch = !q || r.title.toLowerCase().includes(q) || r.category.toLowerCase().includes(q) || r.location.toLowerCase().includes(q) || r.description.toLowerCase().includes(q);
     const matchCat = category === "All Categories" || r.category === category;
     return matchTab && matchSearch && matchCat;
   });
 
   const counts: Record<TabKey, number> = {
-    all:         (reports ?? []).length,
+    all:         (reports ?? []).filter((r) => r.status !== "pending_verification").length,
     approved:    (reports ?? []).filter((r) => r.status === "approved").length,
     in_progress: (reports ?? []).filter((r) => r.status === "in_progress").length,
     accepted:    (reports ?? []).filter((r) => r.status === "accepted").length,
     submitted:   (reports ?? []).filter((r) => r.status === "submitted").length,
     resolved:    (reports ?? []).filter((r) => r.status === "resolved").length,
     rejected:    (reports ?? []).filter((r) => r.status === "rejected").length,
+    my_pending_verification: (reports ?? []).filter((r) => r.status === "pending_verification" && r.user_id === user.id).length,
   };
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -671,17 +686,24 @@ export function ReportsPage() {
                         {[
                           { label: "Report Submitted", done: true },
                           { label: "Under Review", done: true },
-                          { label: "Assigned to Team", done: selectedReport.status !== "pending" },
+                          { label: "Assigned to a Unit", done: !!selectedReport.patrol_assigned_to },
                           { label: "Resolved", done: selectedReport.status === "resolved" },
                         ].map((t, i) => (
-                          <div key={i} className="flex items-center gap-3">
-                            <div
-                              className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${t.done ? "" : "border-2 border-gray-200"}`}
-                              style={{ backgroundColor: t.done ? "#800000" : "transparent" }}
-                            >
-                              {t.done && <CheckCircle className="w-3 h-3 text-white" />}
+                          <div key={i}>
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${t.done ? "" : "border-2 border-gray-200"}`}
+                                style={{ backgroundColor: t.done ? "#800000" : "transparent" }}
+                              >
+                                {t.done && <CheckCircle className="w-3 h-3 text-white" />}
+                              </div>
+                              <span className={`text-sm flex-1 ${t.done ? "font-medium text-gray-900" : "text-gray-400"}`}>{t.label}</span>
                             </div>
-                            <span className={`text-sm flex-1 ${t.done ? "font-medium text-gray-900" : "text-gray-400"}`}>{t.label}</span>
+                            {t.label === "Assigned to a Unit" && t.done && selectedReport.assigned_patrol_name && (
+                              <div className="ml-8 mt-1.5 text-xs text-blue-600 font-medium">
+                                {selectedReport.assigned_patrol_name}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

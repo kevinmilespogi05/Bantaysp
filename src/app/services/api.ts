@@ -134,7 +134,7 @@ export interface Report {
   user_id: string;
   title: string;
   category: string;
-  status: "pending_verification" | "approved" | "rejected" | "in_progress" | "resolved";
+  status: "pending_verification" | "approved" | "rejected" | "in_progress" | "resolved" | "accepted" | "submitted";
   location: string;
   timestamp: string;
   reporter: string;
@@ -156,6 +156,8 @@ export interface Report {
   admin_notes?: string;
   resolution_notes?: string;
   resolution_evidence_url?: string;
+  patrol_assigned_to?: string | null;
+  assigned_patrol_name?: string | null;
 }
 
 export interface Announcement {

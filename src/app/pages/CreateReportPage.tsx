@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import {
   ArrowLeft, MapPin, Upload, X, CheckCircle,
-  FileText, Camera, Send, Info, File, AlertCircle, Loader, Crosshair,
+  FileText, Camera, Send, Info, File, AlertCircle, Loader, Crosshair, Trash2,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -23,6 +23,9 @@ const categories = [
   "Suspicious Activity", "Infrastructure", "Environmental",
   "Public Disturbance", "Natural Disaster", "Crime", "Accident", "Other",
 ];
+
+// Storage key for persisting form data
+const FORM_STORAGE_KEY = "bantay-create-report-draft";
 
 // Reverse geocode helper
 async function reverseGeocode(lat: number, lon: number): Promise<string> {
@@ -211,10 +214,26 @@ export function CreateReportPage() {
     );
   }, []);
 
-  // Auto-fetch location on mount
+  // Load saved form data from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedData = localStorage.getItem(FORM_STORAGE_KEY);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed.form) setForm(parsed.form);
+        if (parsed.markerPos) setMarkerPos(parsed.markerPos);
+        if (parsed.geoLocation) setGeoLocation(parsed.geoLocation);
+        console.log("[Draft Restore] Form data restored from localStorage");
+      }
+    } catch (err) {
+      console.warn("[Draft Restore] Failed to load saved form data:", err);
+    }
+  }, []);
+
+  // Auto-fetch location on mount (only if not restored from draft)
   useEffect(() => {
     const wasStoredLocationDenied = localStorage.getItem("geolocation-denied-report");
-    if (!wasStoredLocationDenied && !geoLocation) {
+    if (!wasStoredLocationDenied && !geoLocation && !markerPos) {
       setTimeout(() => {
         fetchCurrentLocation();
       }, 800); // Small delay to avoid UI flash
@@ -230,6 +249,20 @@ export function CreateReportPage() {
       return () => clearTimeout(timer);
     }
   }, [geoAutofilled]);
+
+  // Auto-save form data to localStorage whenever it changes
+  useEffect(() => {
+    const dataToSave = {
+      form,
+      markerPos,
+      geoLocation,
+    };
+    try {
+      localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(dataToSave));
+    } catch (err) {
+      console.warn("[Draft Auto-save] Failed to save form data:", err);
+    }
+  }, [form, markerPos, geoLocation]);
 
   // Mark if user denied permission
   useEffect(() => {
@@ -257,12 +290,23 @@ export function CreateReportPage() {
     });
   };
 
-  const onMarkerSet = useCallback((pos: [number, number]) => {
+  const onMarkerSet = useCallback(async (pos: [number, number]) => {
     setMarkerPos(pos);
+    // Show coordinates while fetching address
     setForm((f) => ({
       ...f,
-      location: f.location || `${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}`,
+      location: `${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}`,
     }));
+    // Get readable address
+    try {
+      const address = await reverseGeocode(pos[0], pos[1]);
+      setForm((f) => ({
+        ...f,
+        location: address,
+      }));
+    } catch (err) {
+      console.warn("Failed to reverse geocode marker position:", err);
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -320,8 +364,8 @@ export function CreateReportPage() {
       location: form.location,
       image_url: imageUrl,
       image_urls: imageUrls.length > 0 ? imageUrls : undefined,
-      location_lat: geoLocation?.latitude || markerPos?.[0],
-      location_lng: geoLocation?.longitude || markerPos?.[1],
+      location_lat: markerPos?.[0] || geoLocation?.latitude,
+      location_lng: markerPos?.[1] || geoLocation?.longitude,
       admin_notes: form.admin_notes || undefined,
     });
 
@@ -335,6 +379,12 @@ export function CreateReportPage() {
     setSubmitting(false);
     setUploadProgress(null);
     setSubmitted(true);
+    // Clear saved draft on successful submission
+    try {
+      localStorage.removeItem(FORM_STORAGE_KEY);
+    } catch (err) {
+      console.warn("[Draft Clear] Failed to clear saved form data:", err);
+    }
     setTimeout(() => navigate("/app/reports"), 2200);
   };
 
@@ -369,10 +419,26 @@ export function CreateReportPage() {
         >
           <ArrowLeft className="w-5 h-5 text-gray-500" />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="font-semibold text-gray-900 text-sm sm:text-base">File Report</h2>
           <p className="text-gray-400 text-xs sm:text-sm">Document an incident</p>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setForm({ title: "", description: "", category: "", location: "", admin_notes: "" });
+            setMarkerPos(null);
+            try {
+              localStorage.removeItem(FORM_STORAGE_KEY);
+            } catch (err) {
+              console.warn("[Draft Clear] Failed to clear saved form data:", err);
+            }
+          }}
+          className="p-2 rounded-xl hover:bg-red-50 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
+          title="Clear form and drafts"
+        >
+          <Trash2 className="w-5 h-5 text-gray-400 hover:text-red-500" />
+        </button>
       </div>
 
       {/* Error banner */}
