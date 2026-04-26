@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
@@ -118,15 +118,26 @@ export function AdminDashboard() {
     setSearchParams(tab === "overview" ? {} : { tab });
   };
 
-  const { data: stats, loading: statsLoading, error: statsError, refetch: retryStats } = useApi(fetchAdminStats);
-  const { data: reports, loading: reportsLoading, error: reportsError, refetch: refetchReports } = useApi(fetchReports);
-  const { data: pendingReports, loading: pendingReportsLoading, error: pendingReportsError, refetch: refetchPendingReports } = useApi(fetchPendingReports);
-  const { data: submittedReports, loading: submittedReportsLoading, error: submittedReportsError, refetch: refetchSubmittedReports } = useApi(fetchSubmittedReports);
-  const { data: barangayData, loading: chartsLoading } = useApi(fetchBarangayData);
-  const { data: monthlyData } = useApi(fetchMonthlyTrends);
-  const { data: categoryData } = useApi(fetchCategoryData);
-  const { data: leaderboard, loading: lbLoading } = useApi(fetchLeaderboard);
-  const { data: pendingUsers, loading: pendingUsersLoading, refetch: refetchPendingUsers } = useApi(fetchAllUsers);
+  // Memoize fetcher functions to prevent re-fetches on tab switches
+  const memoFetchAdminStats = useCallback(() => fetchAdminStats(), []);
+  const memoFetchReports = useCallback(() => fetchReports(), []);
+  const memoFetchPendingReports = useCallback(() => fetchPendingReports(), []);
+  const memoFetchSubmittedReports = useCallback(() => fetchSubmittedReports(), []);
+  const memoFetchBarangayData = useCallback(() => fetchBarangayData(), []);
+  const memoFetchMonthlyTrends = useCallback(() => fetchMonthlyTrends(), []);
+  const memoFetchCategoryData = useCallback(() => fetchCategoryData(), []);
+  const memoFetchLeaderboard = useCallback(() => fetchLeaderboard(), []);
+  const memoFetchAllUsers = useCallback(() => fetchAllUsers(), []);
+
+  const { data: stats, loading: statsLoading, error: statsError, refetch: retryStats } = useApi(memoFetchAdminStats);
+  const { data: reports, loading: reportsLoading, error: reportsError, refetch: refetchReports } = useApi(memoFetchReports);
+  const { data: pendingReports, loading: pendingReportsLoading, error: pendingReportsError, refetch: refetchPendingReports } = useApi(memoFetchPendingReports);
+  const { data: submittedReports, loading: submittedReportsLoading, error: submittedReportsError, refetch: refetchSubmittedReports } = useApi(memoFetchSubmittedReports);
+  const { data: barangayData, loading: chartsLoading } = useApi(memoFetchBarangayData);
+  const { data: monthlyData } = useApi(memoFetchMonthlyTrends);
+  const { data: categoryData } = useApi(memoFetchCategoryData);
+  const { data: leaderboard, loading: lbLoading } = useApi(memoFetchLeaderboard);
+  const { data: pendingUsers, loading: pendingUsersLoading, refetch: refetchPendingUsers } = useApi(memoFetchAllUsers);
 
   const filteredReports = (reports ?? []).filter(
     (r) =>

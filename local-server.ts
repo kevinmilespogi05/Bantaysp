@@ -2200,10 +2200,11 @@ app.get("/admin/stats", async (req, res) => {
       .from("pending_verification")
       .select("*", { count: "exact", head: true });
 
-    // Get total users (verified)
+    // Get total users (verified) - excluding admins
     const { count: verifiedCount } = await supabase
       .from("user_profiles")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true })
+      .neq("role", "admin");
 
     // Get report stats
     const { data: allReports } = await supabase
