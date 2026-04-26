@@ -1208,7 +1208,7 @@ app.get("/emergency-contacts", async (c) => {
 
 app.get("/leaderboard", async (c) => {
   try {
-    // Query leaderboard from Supabase, excluding admin and patrol roles
+    // Query leaderboard from Supabase, no specific order yet (will sort in code)
     const { data, error } = await supabase
       .from("leaderboard")
       .select(`
@@ -1220,10 +1220,10 @@ app.get("/leaderboard", async (c) => {
           avatar,
           barangay,
           role,
-          verified
+          verified,
+          joined
         )
       `)
-      .order("rank", { ascending: true })
       .limit(100);
 
     if (error) {
@@ -1238,9 +1238,17 @@ app.get("/leaderboard", async (c) => {
              entry.user_profiles.role !== "patrol";
     }) || [];
 
+    // Sort by points (descending), then by created_at (ascending) for consistent ranking
+    const sorted = filtered.sort((a: any, b: any) => {
+      const pointsDiff = (b.points || 0) - (a.points || 0);
+      if (pointsDiff !== 0) return pointsDiff;
+      // If points are equal, sort by join date (earlier joins rank higher)
+      return new Date(a.user_profiles?.joined || 0).getTime() - new Date(b.user_profiles?.joined || 0).getTime();
+    });
+
     // Transform for API response
-    const leaderboard = filtered.map((entry: any, index: number) => ({
-      rank: index + 1, // Re-rank after filtering
+    const leaderboard = sorted.map((entry: any, index: number) => ({
+      rank: index + 1, // Re-rank after filtering and sorting
       name: `${entry.user_profiles?.first_name || ""} ${entry.user_profiles?.last_name || ""}`.trim(),
       points: entry.points || 0,
       reports: entry.reports_count || 0,

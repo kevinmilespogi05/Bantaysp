@@ -2006,15 +2006,22 @@ app.get("/leaderboard", async (req, res) => {
 
     const { data: leaderboard, error } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, avatar, points, reports, barangay, role")
+      .select("id, first_name, last_name, avatar, points, reports, barangay, role, joined")
       .eq("role", "resident")
-      .order("points", { ascending: false })
       .limit(50);
 
     if (error) throw error;
 
+    // Sort by points (descending), then by joined date (ascending) for consistent ranking
+    const sorted = (leaderboard || []).sort((a: any, b: any) => {
+      const pointsDiff = (b.points || 0) - (a.points || 0);
+      if (pointsDiff !== 0) return pointsDiff;
+      // If points are equal, sort by join date (earlier joins rank higher)
+      return new Date(a.joined).getTime() - new Date(b.joined).getTime();
+    });
+
     // Transform to LeaderboardEntry format with rank, combined name, and badge assignment
-    const entries = (leaderboard || []).map((user: any, index: number) => {
+    const entries = sorted.map((user: any, index: number) => {
       // Assign badges based on rank
       let badge = "Member";
       if (index === 0) badge = "Gold";

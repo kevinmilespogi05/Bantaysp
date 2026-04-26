@@ -12,6 +12,7 @@ const badgeConfig: Record<string, { color: string; bg: string; icon: LucideIcon 
   Member: { color: "#3b82f6", bg: "#3b82f615", icon: Star },
 };
 
+// Visual order: 2nd (left), 1st (center/tallest), 3rd (right)
 const podiumLayout = [
   { rankIndex: 1, height: "h-28", color: "#6b7280", crown: "🥈", label: "2nd" },
   { rankIndex: 0, height: "h-40", color: "#d97706", crown: "🥇", label: "1st" },
@@ -23,7 +24,8 @@ const podiumLayout = [
 export function LeaderboardPage() {
   const { data: leaderboard, loading, error, refetch } = useApi(fetchLeaderboard);
 
-  const top3 = leaderboard ? [leaderboard[1], leaderboard[0], leaderboard[2]].filter(Boolean) : [];
+  // Keep natural order: index 0 = rank 1, index 1 = rank 2, index 2 = rank 3
+  const top3 = leaderboard ? leaderboard.slice(0, 3) : [];
   const rest = leaderboard ? leaderboard.slice(3) : [];
 
   return (
