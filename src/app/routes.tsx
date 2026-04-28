@@ -49,6 +49,7 @@ export const router = createBrowserRouter([
       // Resident-accessible routes (protected from admin/patrol)
       { path: "dashboard",        element: <RoleGuard allow={["resident"]}><DashboardPage /></RoleGuard> },
       { path: "reports",          element: <RoleGuard allow={["resident"]}><ReportsPage /></RoleGuard> },
+      { path: "reports/:id",      element: <RoleGuard allow={["resident"]}><ReportsPage /></RoleGuard> },
       { path: "reports/create",   element: <RoleGuard allow={["resident"]}><CreateReportPage /></RoleGuard> },
       { path: "announcements",    element: <RoleGuard allow={["resident", "admin"]}><AnnouncementsPage /></RoleGuard> },
       { path: "emergency",        element: <RoleGuard allow={["resident"]}><EmergencyPage /></RoleGuard> },

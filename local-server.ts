@@ -1538,6 +1538,68 @@ app.get("/user/upvotes", async (req, res) => {
   }
 });
 
+// ─── User Reports Endpoint ─────────────────────────────────────────────────────
+
+/** GET /user/reports - Fetch current user's own reports */
+app.get("/user/reports", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    console.log(`[GetUserReports] Fetching reports for user: ${user.id}`);
+
+    const { data: reports, error } = await supabase
+      .from("reports")
+      .select("id, title, category, status, location, timestamp, created_at, reporter, avatar, description, image_url, verified, comments, upvotes, is_anonymous, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, resolved_by, resolved_at, admin_notes, user_id, resolution_notes, resolution_evidence_url, patrol_assigned_to")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Process reports to handle anonymity and fetch patrol unit names
+    const processedReports = await Promise.all(
+      (reports || []).map(async (report) => {
+        // For user's own reports, always show their real name (not anonymous)
+        const reporterName = report.reporter || "Anonymous Resident";
+        const reporterAvatar = report.avatar || "";
+
+        let assignedPatrolName = null;
+        if (report.patrol_assigned_to) {
+          const { data: patrolUnit } = await supabase
+            .from("patrol_units")
+            .select("name")
+            .eq("id", `patrol-${report.patrol_assigned_to}`)
+            .single();
+          assignedPatrolName = patrolUnit?.name || null;
+        }
+
+        return {
+          ...report,
+          reporter: reporterName,
+          avatar: reporterAvatar,
+          assigned_patrol_name: assignedPatrolName,
+        };
+      })
+    );
+
+    console.log(`[GetUserReports] ✅ User has ${processedReports.length} reports`);
+    res.json(processedReports || []);
+  } catch (err) {
+    console.error(`[GetUserReports] Error:`, err);
+    res.status(500).json({ error: "Failed to fetch user reports" });
+  }
+});
+
 // ─── Chat Endpoints ────────────────────────────────────────────────────────────
 
 /** POST /conversations - Create or get existing conversation */
@@ -4566,6 +4628,7 @@ app.listen(PORT, async () => {
   console.log(`  POST   http://localhost:${PORT}/reports/:id/comments [Add comment to report]`);
   console.log(`  POST   http://localhost:${PORT}/reports/:id/upvote [Toggle upvote on report]`);
   console.log(`  GET    http://localhost:${PORT}/user/upvotes    [Fetch current user's upvoted reports]`);
+  console.log(`  GET    http://localhost:${PORT}/user/reports    [Fetch current user's own reports]`);
   console.log(`  GET    http://localhost:${PORT}/analytics/monthly [Monthly report trends]`);
   console.log(`  GET    http://localhost:${PORT}/analytics/categories [Report categories breakdown]`);
   console.log(`  GET    http://localhost:${PORT}/analytics/weekly [Weekly activity]`);

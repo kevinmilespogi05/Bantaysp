@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Plus, Filter, MapPin, Clock, MessageSquare,
@@ -49,8 +49,7 @@ const REPORT_CATEGORIES = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const navigate = useNavigate();  const { id: reportIdFromUrl } = useParams<{ id: string }>();  const { user } = useAuth();
   const { debouncedQuery } = useSearch();
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -113,6 +112,17 @@ export function ReportsPage() {
   useEffect(() => {
     setLocalSearch(debouncedQuery);
   }, [debouncedQuery]);
+
+  // Handle URL parameter for specific report
+  useEffect(() => {
+    if (reportIdFromUrl && reports && reports.length > 0) {
+      const report = reports.find(r => r.id === reportIdFromUrl);
+      if (report) {
+        setSelectedReport(report);
+        setShowComments(false);
+      }
+    }
+  }, [reportIdFromUrl, reports]);
 
   // ── Derived filtered list ─────────────────────────────────────────────────
   const filtered = (reports ?? []).filter((r) => {

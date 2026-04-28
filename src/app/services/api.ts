@@ -464,6 +464,10 @@ export async function fetchDashboardStats(): Promise<ApiResponse<DashboardStats 
   return apiFetch<DashboardStats>("/dashboard/stats");
 }
 
+export async function fetchUserReports(): Promise<ApiResponse<Report[]>> {
+  return apiFetch<Report[]>("/user/reports");
+}
+
 export async function fetchAdminStats(): Promise<ApiResponse<AdminStats | null>> {
   return apiFetch<AdminStats>("/admin/stats");
 }
