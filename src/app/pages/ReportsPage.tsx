@@ -134,11 +134,11 @@ export function ReportsPage() {
       // Only show current user's pending verification reports
       matchTab = r.status === "pending_verification" && isCurrentUserReport;
     } else if (activeTab === "all") {
-      // Show all reports EXCEPT pending_verification (which are hidden from other users)
-      matchTab = r.status !== "pending_verification";
+      // General community view: only show approved or resolved reports
+      matchTab = r.status === "approved" || r.status === "resolved";
     } else {
-      // Other tabs show only matching status, excluding pending_verification
-      matchTab = r.status === activeTab && r.status !== "pending_verification";
+      // Other tabs show only matching status
+      matchTab = r.status === activeTab;
     }
     
     const matchSearch = !q || r.title.toLowerCase().includes(q) || r.category.toLowerCase().includes(q) || r.location.toLowerCase().includes(q) || r.description.toLowerCase().includes(q);
@@ -147,7 +147,7 @@ export function ReportsPage() {
   });
 
   const counts: Record<TabKey, number> = {
-    all:         (reports ?? []).filter((r) => r.status !== "pending_verification").length,
+    all:         (reports ?? []).filter((r) => r.status === "approved" || r.status === "resolved").length,
     approved:    (reports ?? []).filter((r) => r.status === "approved").length,
     in_progress: (reports ?? []).filter((r) => r.status === "in_progress").length,
     accepted:    (reports ?? []).filter((r) => r.status === "accepted").length,

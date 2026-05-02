@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Search, MessageSquare, ArrowLeft } from "lucide-react";
+import { Search, MessageSquare, ArrowLeft } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { getConversations, type Conversation } from "../services/api";
+import { createConversation, fetchVerifiedUsers, getConversations, type Conversation, type UserProfile } from "../services/api";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { SkeletonCard, EmptyState, ErrorState } from "../components/ui/DataStates";
 
@@ -14,6 +14,8 @@ export function ChatPage() {
   // State
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [adminUser, setAdminUser] = useState<UserProfile | null>(null);
+  const [creatingAdminConversation, setCreatingAdminConversation] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,16 +68,87 @@ export function ChatPage() {
     fetchConversations();
   }, []);
 
-  const handleNewChat = () => {
-    navigate("/app/chat/new");
+  // Fetch the admin user so we can show the admin contact even before a conversation exists
+  useEffect(() => {
+    const fetchAdmin = async () => {
+      try {
+        const { data: users, error } = await fetchVerifiedUsers();
+        if (error) throw new Error(error);
+
+        const admin = (users || []).find((u) => u.role === "admin");
+        if (admin) {
+          setAdminUser(admin);
+        }
+      } catch (err) {
+        console.error("[Chat] Failed to load admin user:", err);
+      }
+    };
+
+    fetchAdmin();
+  }, []);
+
+  const handleCreateAdminConversation = async () => {
+    if (!adminUser) return;
+
+    try {
+      setCreatingAdminConversation(true);
+      const { data, error } = await createConversation(adminUser.id);
+      if (error) throw new Error(error);
+      if (!data) throw new Error("Failed to create admin conversation");
+
+      const newConversation = {
+        id: data.id,
+        participant: {
+          id: adminUser.id,
+          name: `${adminUser.first_name} ${adminUser.last_name}`.trim() || "Admin",
+          avatar: adminUser.avatar || "AD",
+        },
+      } as Conversation;
+
+      setConversations((prev) => [newConversation, ...prev]);
+      setSelectedConversation(newConversation);
+      setShowMobile(true);
+    } catch (err) {
+      console.error("[Chat] Failed to create admin conversation:", err);
+    } finally {
+      setCreatingAdminConversation(false);
+    }
   };
 
   const handleSelectConversation = (conversation: Conversation) => {
+    if (conversation.id === "admin-placeholder") {
+      handleCreateAdminConversation();
+      return;
+    }
+
     setSelectedConversation(conversation);
     setShowMobile(true);
   };
 
-  const filteredConversations = conversations.filter((conv) =>
+  const adminPlaceholder = adminUser
+    ? {
+        id: "admin-placeholder",
+        participant: {
+          id: adminUser.id,
+          name: `${adminUser.first_name} ${adminUser.last_name}`.trim() || "Admin",
+          avatar: adminUser.avatar || "AD",
+        },
+        lastMessage: undefined,
+      } as Conversation
+    : null;
+
+  const existingAdminConversation = adminUser
+    ? conversations.find((conv) => conv.participant?.id === adminUser.id)
+    : null;
+
+  const conversationsWithAdmin = adminUser
+    ? [
+        ...(existingAdminConversation ? [] : adminPlaceholder ? [adminPlaceholder] : []),
+        ...conversations,
+      ]
+    : conversations;
+
+  const filteredConversations = conversationsWithAdmin.filter((conv) =>
     conv.participant?.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -89,13 +162,6 @@ export function ChatPage() {
             <h2 className="font-semibold text-gray-900" style={{ fontSize: "1.1rem" }}>
               Direct Messages
             </h2>
-            <button
-              onClick={handleNewChat}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-              title="New chat"
-            >
-              <Plus className="w-5 h-5 text-gray-600" />
-            </button>
           </div>
 
           {/* Search */}
@@ -128,16 +194,7 @@ export function ChatPage() {
               <EmptyState
                 icon={MessageSquare}
                 title={search ? "No matching conversations" : "No conversations yet"}
-                description={search ? "Try a different search" : "Start chatting with an admin"}
-                action={!search ? (
-                  <button
-                    onClick={handleNewChat}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
-                    style={{ backgroundColor: "#800000" }}
-                  >
-                    <Plus className="w-4 h-4" /> New Chat
-                  </button>
-                ) : undefined}
+                description={search ? "Try a different search" : "Your admin chat will appear here automatically."}
               />
             </div>
           ) : (
@@ -222,14 +279,7 @@ export function ChatPage() {
             <div className="text-center">
               <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500 text-lg font-medium">Select a conversation</p>
-              <p className="text-gray-400 text-sm mt-1">Choose from your existing chats or start a new one</p>
-              <button
-                onClick={handleNewChat}
-                className="mt-6 flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium mx-auto"
-                style={{ backgroundColor: "#800000" }}
-              >
-                <Plus className="w-4 h-4" /> Start New Chat
-              </button>
+              <p className="text-gray-400 text-sm mt-1">Your admin chat appears here automatically.</p>
             </div>
           </div>
         )}

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   User, Settings, Trophy, CheckCircle, Shield, Star, Zap, Award,
-  MapPin, Mail, Phone, Calendar, Edit3, Camera, BadgeCheck,
+  MapPin, Mail, Phone, Calendar, Edit3, BadgeCheck,
   FileText, Lock, Bell, Eye, ThumbsUp, X, Image, MessageSquare,
   Clock, Send, AlertCircle, ChevronDown,
 } from "lucide-react";
@@ -229,11 +229,6 @@ export function ProfilePage() {
         {/* Cover photo */}
         <div className="h-36 sm:h-44 relative" style={{ background: "linear-gradient(135deg, #800000, #600000)" }}>
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 30% 50%, white 1px, transparent 1px)", backgroundSize: "20px 20px" }} />
-          {/* Camera button for cover */}
-          <button className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/30 text-white text-xs hover:bg-black/50 transition-colors backdrop-blur-sm">
-            <Camera className="w-3.5 h-3.5" />
-            Change Cover
-          </button>
         </div>
 
         {/* Avatar row — overlaps cover with negative margin */}
@@ -247,9 +242,6 @@ export function ProfilePage() {
               >
                 {displayUser.avatar}
               </div>
-              <button className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center border-2 border-white">
-                <Camera className="w-3.5 h-3.5 text-white" />
-              </button>
             </div>
 
             {/* Name + badges — always below avatar, never overlapping cover */}

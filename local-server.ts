@@ -1969,30 +1969,41 @@ app.get("/analytics/monthly", async (req, res) => {
 
     const { data: monthlyData, error } = await supabase
       .from("reports")
-      .select("created_at, status")
+      .select("created_at, status, resolved_at")
       .order("created_at", { ascending: true });
 
     if (error) throw error;
 
-    // Group by month
-    const monthlyTrends = new Map();
-    (monthlyData || []).forEach((report: any) => {
-      const date = new Date(report.created_at);
-      const monthKey = date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-
-      if (!monthlyTrends.has(monthKey)) {
-        monthlyTrends.set(monthKey, { reports: 0, resolved: 0 });
-      }
-
-      const stats = monthlyTrends.get(monthKey);
-      if (report.status === "resolved") {
-        stats.resolved++;
-      } else {
-        stats.reports++;
-      }
+    const now = new Date();
+    const monthKeys = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+      return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
     });
 
-    res.json(Array.from(monthlyTrends, ([month, data]) => ({ month, ...data})));
+    const monthlyTrends = new Map<string, { month: string; reports: number; resolved: number }>(
+      monthKeys.map((month) => [month, { month, reports: 0, resolved: 0 }])
+    );
+
+    (monthlyData || [])
+      .filter((report: any) => report.status !== "pending_verification")
+      .forEach((report: any) => {
+        const createdDate = new Date(report.created_at);
+        const createdMonth = createdDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+        if (monthlyTrends.has(createdMonth)) {
+          monthlyTrends.get(createdMonth)!.reports += 1;
+        }
+
+        if (report.status === "resolved") {
+          const resolvedDate = report.resolved_at ? new Date(report.resolved_at) : createdDate;
+          const resolvedMonth = resolvedDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+          if (monthlyTrends.has(resolvedMonth)) {
+            monthlyTrends.get(resolvedMonth)!.resolved += 1;
+          }
+        }
+      });
+
+    res.json(monthKeys.map((month) => monthlyTrends.get(month)));
   } catch (err) {
     console.error(`[Analytics/Monthly] Error:`, err);
     res.status(500).json({ error: "Failed to fetch monthly analytics" });

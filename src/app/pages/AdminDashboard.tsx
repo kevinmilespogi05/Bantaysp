@@ -74,8 +74,11 @@ const adminTabs: { key: AdminTab; label: string; icon: LucideIcon }[] = [
 
 export function AdminDashboard() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, session } = useAuth();
   const { showToast } = useToast();
+  // Stable token string used as a re-fetch trigger: when a session token
+  // arrives after login, all useApi hooks will automatically re-fetch.
+  const sessionToken = session?.access_token ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   const [reportSearch, setReportSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -129,15 +132,15 @@ export function AdminDashboard() {
   const memoFetchLeaderboard = useCallback(() => fetchLeaderboard(), []);
   const memoFetchAllUsers = useCallback(() => fetchAllUsers(), []);
 
-  const { data: stats, loading: statsLoading, error: statsError, refetch: retryStats } = useApi(memoFetchAdminStats);
-  const { data: reports, loading: reportsLoading, error: reportsError, refetch: refetchReports } = useApi(memoFetchReports);
-  const { data: pendingReports, loading: pendingReportsLoading, error: pendingReportsError, refetch: refetchPendingReports } = useApi(memoFetchPendingReports);
-  const { data: submittedReports, loading: submittedReportsLoading, error: submittedReportsError, refetch: refetchSubmittedReports } = useApi(memoFetchSubmittedReports);
-  const { data: barangayData, loading: chartsLoading } = useApi(memoFetchBarangayData);
-  const { data: monthlyData } = useApi(memoFetchMonthlyTrends);
-  const { data: categoryData } = useApi(memoFetchCategoryData);
-  const { data: leaderboard, loading: lbLoading } = useApi(memoFetchLeaderboard);
-  const { data: pendingUsers, loading: pendingUsersLoading, refetch: refetchPendingUsers } = useApi(memoFetchAllUsers);
+  const { data: stats, loading: statsLoading, error: statsError, refetch: retryStats } = useApi(memoFetchAdminStats, [sessionToken]);
+  const { data: reports, loading: reportsLoading, error: reportsError, refetch: refetchReports } = useApi(memoFetchReports, [sessionToken]);
+  const { data: pendingReports, loading: pendingReportsLoading, error: pendingReportsError, refetch: refetchPendingReports } = useApi(memoFetchPendingReports, [sessionToken]);
+  const { data: submittedReports, loading: submittedReportsLoading, error: submittedReportsError, refetch: refetchSubmittedReports } = useApi(memoFetchSubmittedReports, [sessionToken]);
+  const { data: barangayData, loading: chartsLoading } = useApi(memoFetchBarangayData, [sessionToken]);
+  const { data: monthlyData } = useApi(memoFetchMonthlyTrends, [sessionToken]);
+  const { data: categoryData } = useApi(memoFetchCategoryData, [sessionToken]);
+  const { data: leaderboard, loading: lbLoading } = useApi(memoFetchLeaderboard, [sessionToken]);
+  const { data: pendingUsers, loading: pendingUsersLoading, refetch: refetchPendingUsers } = useApi(memoFetchAllUsers, [sessionToken]);
 
   const filteredReports = (reports ?? []).filter(
     (r) =>

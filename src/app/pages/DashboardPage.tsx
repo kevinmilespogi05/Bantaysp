@@ -59,6 +59,8 @@ export function DashboardPage() {
   const { data: weekly } = useApi(fetchWeeklyActivity);
   const { data: leaderboard, loading: lbLoading } = useApi(fetchLeaderboard);
 
+  const visibleReports = (reports ?? []).filter((r) => r.status !== "pending_verification");
+
   // ── KPI card definitions (derived from API data) ─────────────────────────
 
   const kpiCards = stats
@@ -188,10 +190,10 @@ export function DashboardPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={(value) => Number(value).toString()} />
                   <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
-                  <Area type="monotone" dataKey="reports" stroke="#800000" strokeWidth={2} fill="url(#gFiled)" name="Filed" />
-                  <Area type="monotone" dataKey="resolved" stroke="#16a34a" strokeWidth={2} fill="url(#gResolved)" name="Resolved" />
+                  <Area type="linear" dataKey="reports" stroke="#800000" strokeWidth={2} fill="url(#gFiled)" name="Filed" />
+                  <Area type="linear" dataKey="resolved" stroke="#16a34a" strokeWidth={2} fill="url(#gResolved)" name="Resolved" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -255,7 +257,7 @@ export function DashboardPage() {
             <SkeletonList rows={5} />
           ) : reportsError ? (
             <ErrorState message={reportsError} compact />
-          ) : !reports || reports.length === 0 ? (
+          ) : !visibleReports || visibleReports.length === 0 ? (
             <EmptyState
               icon={FileText}
               title="No reports yet"
@@ -272,7 +274,7 @@ export function DashboardPage() {
             />
           ) : (
             <div className="divide-y divide-gray-50">
-              {reports.slice(0, 5).map((r) => {
+              {visibleReports.slice(0, 5).map((r) => {
                 const s = statusConfig[r.status];
                 return (
                   <div
