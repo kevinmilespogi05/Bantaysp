@@ -38,7 +38,7 @@ export function RegisterPage() {
     lastName: "",
     email: "",
     phone: "",
-    barangay: "",
+    barangay: "Brgy. San Pablo",
     password: "",
   });
 
