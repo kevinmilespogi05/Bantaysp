@@ -8,7 +8,7 @@ import {
   ClipboardList, ArrowRight, LogOut, Loader, Image as ImageIcon, X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { useApi, fetchActiveCase, fetchAssignedReports, fetchPatrolStats, fetchPatrolHistory, cancelPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary } from "../../services/api";
+import { useApi, fetchActiveCase, fetchAssignedReports, fetchPatrolStats, fetchPatrolHistory, cancelPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary, addPatrolComment } from "../../services/api";
 import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataStates";
 
 type CaseStatus = "assigned" | "accepted" | "in_progress" | "submitted" | "resolving" | "resolved";
@@ -217,21 +217,9 @@ export function PatrolDashboard() {
       // Post resolution notes as patrol comment visible to residents
       if (resNotes.trim() && session?.access_token) {
         try {
-          const commentResponse = await fetch("http://localhost:3000/patrol-comments", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              report_id: activeCase.id,
-              comment_text: resNotes,
-              author_role: "patrol",
-            }),
-          });
-          
-          if (!commentResponse.ok) {
-            console.warn("[PatrolDashboard] Failed to post comment, but resolution was successful");
+          const { error: commentError } = await addPatrolComment(activeCase.id, resNotes, "patrol");
+          if (commentError) {
+            console.warn("[PatrolDashboard] Failed to post comment, but resolution was successful", commentError);
           } else {
             console.log("[PatrolDashboard] ✅ Patrol comment posted");
           }

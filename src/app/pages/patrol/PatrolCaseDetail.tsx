@@ -7,7 +7,7 @@ import {
   XCircle, MessageSquare, Image as ImageIcon, Loader, X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { useApi, fetchAssignedReports, fetchAvailableReports, fetchPatrolCase, acceptPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary } from "../../services/api";
+import { useApi, fetchAssignedReports, fetchAvailableReports, fetchPatrolCase, acceptPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary, addPatrolComment } from "../../services/api";
 
 type CaseStatus = "pending" | "accepted" | "in_progress" | "submitted" | "resolving" | "resolved";
 
@@ -192,21 +192,9 @@ export function PatrolCaseDetail() {
       // Post resolution notes as patrol comment visible to residents
       if (resNotes.trim() && session?.access_token) {
         try {
-          const commentResponse = await fetch("http://localhost:3000/patrol-comments", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              report_id: id,
-              comment_text: resNotes,
-              author_role: "patrol",
-            }),
-          });
-          
-          if (!commentResponse.ok) {
-            console.warn("[PatrolCaseDetail] Failed to post comment, but resolution was successful");
+          const { error: commentError } = await addPatrolComment(id, resNotes, "patrol");
+          if (commentError) {
+            console.warn("[PatrolCaseDetail] Failed to post comment, but resolution was successful", commentError);
           } else {
             console.log("[PatrolCaseDetail] ✅ Patrol comment posted");
           }
@@ -285,22 +273,10 @@ export function PatrolCaseDetail() {
         throw new Error("Authentication required. Please log in.");
       }
 
-      const response = await fetch("http://localhost:3000/patrol-comments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          report_id: id,
-          comment_text: comment,
-          author_role: "patrol",
-        }),
-      });
+      const { error: commentError } = await addPatrolComment(id, comment, "patrol");
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || "Failed to submit note");
+      if (commentError) {
+        throw new Error(commentError);
       }
 
       console.log("[PatrolCaseDetail] ✅ Field note submitted as patrol comment");
