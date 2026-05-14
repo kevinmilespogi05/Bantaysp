@@ -4,6 +4,7 @@ import { useMessages } from "../../hooks/useChat";
 import { MessageInput } from "./MessageInput";
 import { useState, useCallback } from "react";
 import type { Conversation, Message } from "../../services/api";
+import { parseTimestampAsUTC } from "@/lib/dates";
 
 interface ChatWindowProps {
   conversation: Conversation;
@@ -47,7 +48,7 @@ export function ChatWindow({ conversation }: ChatWindowProps) {
 
   // Combine real-time messages with optimistic ones
   const allMessages = [...messages, ...optimisticMessages].sort((a, b) => 
-    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    parseTimestampAsUTC(a.created_at).getTime() - parseTimestampAsUTC(b.created_at).getTime()
   );
 
   // Debug: Log all messages with their sender IDs
@@ -122,8 +123,8 @@ export function ChatWindow({ conversation }: ChatWindowProps) {
                 
                 const showTime =
                   index === 0 ||
-                  new Date(allMessages[index - 1].created_at).getTime() -
-                    new Date(msg.created_at).getTime() >
+                  parseTimestampAsUTC(allMessages[index - 1].created_at).getTime() -
+                    parseTimestampAsUTC(msg.created_at).getTime() >
                     5 * 60 * 1000; // Show time if gap > 5 min
 
                 return (
@@ -139,7 +140,7 @@ export function ChatWindow({ conversation }: ChatWindowProps) {
                     
                     {showTime && (
                       <span className="text-gray-400 text-xs text-center w-full mb-2">
-                        {new Date(msg.created_at).toLocaleTimeString("en-PH", {
+                        {parseTimestampAsUTC(msg.created_at).toLocaleTimeString("en-PH", {
                           hour: "2-digit",
                           minute: "2-digit",
                           hour12: true,
@@ -154,7 +155,7 @@ export function ChatWindow({ conversation }: ChatWindowProps) {
                           : "bg-gray-100 text-gray-800 rounded-tl-none"
                       }`}
                       style={isMe ? { backgroundColor: "#800000" } : {}}
-                      title={new Date(msg.created_at).toLocaleString("en-PH", {
+                      title={parseTimestampAsUTC(msg.created_at).toLocaleString("en-PH", {
                         year: "numeric",
                         month: "short",
                         day: "numeric",

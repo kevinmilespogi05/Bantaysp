@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { getConversations, type Conversation } from "../../services/api";
 import { ChatWindow } from "../../components/chat/ChatWindow";
 import { SkeletonCard, EmptyState, ErrorState } from "../../components/ui/DataStates";
+import { parseTimestampAsUTC } from "@/lib/dates";
 
 export function AdminChatPage() {
   const { user } = useAuth();
@@ -134,7 +135,7 @@ export function AdminChatPage() {
                         )}
                         {conv.lastMessage?.created_at && (
                           <div className="text-gray-400 text-xs mt-1">
-                            {new Date(conv.lastMessage.created_at).toLocaleDateString("en-PH", {
+                            {parseTimestampAsUTC(conv.lastMessage.created_at).toLocaleDateString("en-PH", {
                               month: "short",
                               day: "numeric",
                               hour: "2-digit",
