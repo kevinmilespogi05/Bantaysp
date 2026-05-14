@@ -5,6 +5,7 @@ import {
   ArrowLeft, MapPin, Clock, User, Phone, AlertTriangle,
   CheckCircle, Camera, FileText, Zap, ChevronRight,
   XCircle, MessageSquare, Image as ImageIcon, Loader, X,
+  Navigation,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useApi, fetchAssignedReports, fetchAvailableReports, fetchPatrolCase, acceptPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary, addPatrolComment } from "../../services/api";
