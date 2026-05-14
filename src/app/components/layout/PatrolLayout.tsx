@@ -3,7 +3,6 @@ import { Outlet, NavLink, useNavigate, useLocation } from "react-router";
 import {
   LayoutDashboard,
   ClipboardList,
-  Map,
   History,
   User,
   Bell,
@@ -25,7 +24,6 @@ import { BantayLogo } from "../ui/BantayLogo";
 const patrolNav = [
   { path: "/app/patrol/dashboard", icon: LayoutDashboard, label: "Dashboard", short: "Home" },
   { path: "/app/patrol/assigned", icon: ClipboardList, label: "Assigned", short: "Cases" },
-  { path: "/app/patrol/map", icon: Map, label: "Map / Navigate", short: "Map" },
   { path: "/app/patrol/history", icon: History, label: "History", short: "History" },
   { path: "/app/patrol/profile", icon: User, label: "My Profile", short: "Profile" },
 ];
@@ -33,7 +31,6 @@ const patrolNav = [
 const patrolPageNames: Record<string, string> = {
   "/app/patrol/dashboard": "Active Case",
   "/app/patrol/assigned": "Assigned Reports",
-  "/app/patrol/map": "Navigation Map",
   "/app/patrol/history": "Resolved Cases",
   "/app/patrol/profile": "Patrol Profile",
 };

@@ -22,7 +22,6 @@ import { AdminPatrolMonitoring } from "./pages/admin/AdminPatrolMonitoring";
 import { AdminChatPage } from "./pages/admin/AdminChatPage";
 import { PatrolDashboard } from "./pages/patrol/PatrolDashboard";
 import { PatrolAssignedReports } from "./pages/patrol/PatrolAssignedReports";
-import { PatrolMapView } from "./pages/patrol/PatrolMapView";
 import { PatrolHistory } from "./pages/patrol/PatrolHistory";
 import { PatrolCaseDetail } from "./pages/patrol/PatrolCaseDetail";
 import { PatrolProfile } from "./pages/patrol/PatrolProfile";
@@ -101,7 +100,6 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/app/patrol/dashboard" replace /> },
       { path: "dashboard", Component: PatrolDashboard },
       { path: "assigned",  Component: PatrolAssignedReports },
-      { path: "map",       Component: PatrolMapView },
       { path: "history",   Component: PatrolHistory },
       { path: "profile",   Component: PatrolProfile },
       { path: "case/:id",  Component: PatrolCaseDetail },

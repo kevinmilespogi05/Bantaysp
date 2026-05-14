@@ -880,7 +880,7 @@ app.get("/auth/check-verification/:userId", async (req, res) => {
     // Check if user exists in user_profiles table
     const { data: profile, error } = await supabase
       .from("user_profiles")
-      .select("id")
+      .select("status, banreason")
       .eq("id", userId)
       .single();
 
@@ -888,16 +888,25 @@ app.get("/auth/check-verification/:userId", async (req, res) => {
       if (error.code === "PGRST116") {
         // No rows found - user not in user_profiles (still pending or rejected)
         console.log(`[CheckVerification] User ${userId} not verified - not in user_profiles`);
-        return res.json({ verified: false });
+        return res.json({ verified: false, status: "pending" });
       }
       
-      console.error(`[CheckVerification] Error: ${error.code} - ${error.message}`);
+      console.error(`[CheckVerification] Supabase query error:`, error);
       return res.status(500).json({ error: "Verification check failed" });
+    }
+
+    if (profile?.status === "banned") {
+      console.log(`[CheckVerification] User ${userId} is banned and cannot sign in`);
+      return res.json({
+        verified: false,
+        status: "banned",
+        banReason: profile.banreason || null,
+      });
     }
 
     // User exists in user_profiles - they are verified
     console.log(`[CheckVerification] User ${userId} verified - found in user_profiles`);
-    res.json({ verified: true });
+    res.json({ verified: true, status: "active" });
   } catch (err) {
     console.error(`[CheckVerification] Error:`, err);
     res.status(500).json({ error: "Verification check failed" });
@@ -2683,6 +2692,16 @@ app.post("/admin/promote-to-patrol", async (req, res) => {
 /** POST /admin/demote-from-patrol - Demote patrol officer back to resident */
 app.post("/admin/demote-from-patrol", async (req, res) => {
   try {
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid) {
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error || "Unauthorized" });
+    }
+
+    const adminValidation = await validateAdminRole(authValidation.userId!);
+    if (!adminValidation.valid) {
+      return res.status(adminValidation.statusCode || 403).json({ error: adminValidation.error || "Admin access required" });
+    }
+
     const { userId } = req.body;
 
     if (!userId) {
@@ -2723,6 +2742,141 @@ app.post("/admin/demote-from-patrol", async (req, res) => {
   } catch (err) {
     console.error(`[DemoteFromPatrol] Error:`, err);
     res.status(500).json({ error: "Failed to demote user" });
+  }
+});
+
+/** GET /admin/banned-users - Get banned user profiles */
+app.get("/admin/banned-users", async (req, res) => {
+  try {
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid) {
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error || "Unauthorized" });
+    }
+
+    const adminValidation = await validateAdminRole(authValidation.userId!);
+    if (!adminValidation.valid) {
+      return res.status(adminValidation.statusCode || 403).json({ error: adminValidation.error || "Admin access required" });
+    }
+
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("status", "banned")
+      .neq("role", "admin");
+
+    if (error) {
+      console.error(`[FetchBannedUsers] Error fetching banned users:`, error);
+      return res.status(500).json({ error: "Failed to fetch banned users" });
+    }
+
+    res.json(data || []);
+  } catch (err) {
+    console.error(`[FetchBannedUsers] Error:`, err);
+    res.status(500).json({ error: "Failed to fetch banned users" });
+  }
+});
+
+/** POST /admin/ban-user - Mark a user as banned */
+app.post("/admin/ban-user", async (req, res) => {
+  try {
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid) {
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error || "Unauthorized" });
+    }
+
+    const adminValidation = await validateAdminRole(authValidation.userId!);
+    if (!adminValidation.valid) {
+      return res.status(adminValidation.statusCode || 403).json({ error: adminValidation.error || "Admin access required" });
+    }
+
+    const { userId, reason } = req.body;
+
+    if (!userId || !reason) {
+      return res.status(400).json({ error: "Missing required fields: userId, reason" });
+    }
+
+    const { data: userProfile, error: fetchError } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !userProfile) {
+      console.error(`[BanUser] User profile not found:`, fetchError);
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    const { error: updateError } = await supabase
+      .from("user_profiles")
+      .update({
+        status: "banned",
+        banreason: reason,
+        bannedat: new Date().toISOString(),
+        bannedby: authValidation.userId,
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error(`[BanUser] Error banning user:`, updateError);
+      return res.status(500).json({ error: "Failed to ban user" });
+    }
+
+    res.json({ success: true, message: "User banned successfully" });
+  } catch (err) {
+    console.error(`[BanUser] Error:`, err);
+    res.status(500).json({ error: "Failed to ban user" });
+  }
+});
+
+/** POST /admin/unban-user - Restore a banned user */
+app.post("/admin/unban-user", async (req, res) => {
+  try {
+    const authValidation = await validateToken(req.headers.authorization);
+    if (!authValidation.valid) {
+      return res.status(authValidation.statusCode || 401).json({ error: authValidation.error || "Unauthorized" });
+    }
+
+    const adminValidation = await validateAdminRole(authValidation.userId!);
+    if (!adminValidation.valid) {
+      return res.status(adminValidation.statusCode || 403).json({ error: adminValidation.error || "Admin access required" });
+    }
+
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "Missing required field: userId" });
+    }
+
+    const { data: userProfile, error: fetchError } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !userProfile) {
+      console.error(`[UnbanUser] User profile not found:`, fetchError);
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    const { error: updateError } = await supabase
+      .from("user_profiles")
+      .update({
+        status: "active",
+        banreason: null,
+        bannedat: null,
+        bannedby: null,
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error(`[UnbanUser] Error unbanning user:`, updateError);
+      return res.status(500).json({ error: "Failed to unban user" });
+    }
+
+    res.json({ success: true, message: "User unbanned successfully" });
+  } catch (err) {
+    console.error(`[UnbanUser] Error:`, err);
+    res.status(500).json({ error: "Failed to unban user" });
   }
 });
 

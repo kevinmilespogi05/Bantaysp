@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft, MapPin, Clock, User, Phone, AlertTriangle,
-  CheckCircle, Navigation, Camera, FileText, Zap, ChevronRight,
+  CheckCircle, Camera, FileText, Zap, ChevronRight,
   XCircle, MessageSquare, Image as ImageIcon, Loader, X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -525,34 +525,6 @@ export function PatrolCaseDetail() {
           </div>
         )}
 
-        {/* ── Map Preview ─────────────────────────────── */}
-        <div
-          className="rounded-2xl overflow-hidden border border-slate-700/50 relative cursor-pointer"
-          onClick={() => navigate("/app/patrol/map")}
-          style={{ height: "140px" }}
-        >
-          <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#1e2432" }}>
-            <svg className="absolute inset-0 w-full h-full opacity-20">
-              <defs>
-                <pattern id="mini-grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                  <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#4a5568" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#mini-grid)"/>
-            </svg>
-            <div className="relative flex flex-col items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-red-400" />
-              </div>
-              <span className="text-slate-400 text-xs">{report.location}</span>
-            </div>
-          </div>
-          <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-white font-medium border border-slate-600" style={{ backgroundColor: "#161b22" }}>
-            <Navigation className="w-3 h-3 text-blue-400" />
-            Open Map · {report.distance}
-          </div>
-        </div>
-
         {/* ── Upload Evidence ──────────────────────────── */}
         <div className="rounded-2xl p-4 border border-slate-700/50" style={{ backgroundColor: "#161b22" }}>
           <h3 className="text-slate-400 text-xs font-semibold mb-3 uppercase tracking-wide">Field Updates</h3>
@@ -633,12 +605,6 @@ export function PatrolCaseDetail() {
           )}
           {status === "accepted" && (
             <div className="flex gap-2">
-              <button
-                onClick={() => navigate("/app/patrol/map")}
-                className="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all"
-              >
-                <Navigation className="w-5 h-5" /> Navigate
-              </button>
               <button
                 onClick={() => {
                   console.log("[PatrolCaseDetail] 'In Progress' button clicked");

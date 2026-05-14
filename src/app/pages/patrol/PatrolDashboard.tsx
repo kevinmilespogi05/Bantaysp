@@ -430,22 +430,10 @@ export function PatrolDashboard() {
                         >
                           <XCircle className="w-4 h-4" /> <span className="hidden xs:inline">Decline</span>
                         </button>
-                        <button
-                          onClick={() => navigate("/app/patrol/map")}
-                          className="flex items-center justify-center gap-1 px-3 py-2.5 sm:py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-medium transition-all"
-                        >
-                          <Navigation className="w-4 h-4" /> <span className="hidden xs:inline">Map</span>
-                        </button>
                       </>
                     )}
                     {caseStatus === "accepted" && (
                       <>
-                        <button
-                          onClick={() => navigate("/app/patrol/map")}
-                          className="flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 sm:py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm transition-all hover:scale-[1.02]"
-                        >
-                          <Navigation className="w-4 h-4" /> <span>Navigate</span>
-                        </button>
                         <button
                           onClick={handleInProgress}
                           disabled={inProgressLoading}
@@ -503,12 +491,6 @@ export function PatrolDashboard() {
                           style={{ backgroundColor: "#16a34a" }}
                         >
                           <CheckCircle className="w-4 h-4" /> <span>Resolved</span>
-                        </button>
-                        <button
-                          onClick={() => navigate("/app/patrol/map")}
-                          className="flex items-center justify-center gap-1 px-3 py-2.5 sm:py-3 rounded-xl bg-blue-600/80 hover:bg-blue-500 text-white text-xs sm:text-sm transition-all"
-                        >
-                          <Navigation className="w-4 h-4" /> <span className="hidden xs:inline">Map</span>
                         </button>
                         <button
                           onClick={() => {}}

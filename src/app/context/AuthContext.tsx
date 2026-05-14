@@ -37,6 +37,7 @@ export interface AuthUser {
   avatar: string;
   role: UserRole;
   barangay: string;
+  status: "active" | "banned";
 }
 
 // ─── Helper: Create base user from Supabase User (non-blocking) ────────────────
@@ -54,6 +55,7 @@ function mapSupabaseUser(user: User): AuthUser {
     avatar: meta.avatar ?? (fullName ? fullName.slice(0, 2).toUpperCase() : "?"),
     role: "resident", // Default to resident until DB confirms role
     barangay: meta.barangay ?? "",
+    status: "active",
   };
 }
 
@@ -144,6 +146,7 @@ async function enrichUserWithDatabaseProfile(
         avatar: profile.avatar || baseUser.avatar,
         role: (profile.role as UserRole) || "resident",
         barangay: profile.barangay || "",
+        status: (profile.status as "active" | "banned") || "active",
       };
     } catch (err) {
       clearTimeout(timeoutId);
@@ -379,9 +382,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: verificationData } = await checkUserVerification(session.data.session.user.id);
 
     if (!verificationData?.verified) {
-      // User is not yet verified - log them back out
+      // User is not yet verified or has been suspended
       await supabase.auth.signOut();
       setIsLoading(false);
+
+      if (verificationData?.status === "banned") {
+        const reason = verificationData.banReason?.trim();
+        return reason
+          ? `Your account has been suspended by an administrator. Reason: ${reason}`
+          : "Your account has been suspended by an administrator. Please contact support for more information.";
+      }
+
       return "Your account is pending admin verification. You will be notified once approved.";
     }
 

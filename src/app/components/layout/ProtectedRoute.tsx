@@ -43,6 +43,13 @@ export function ProtectedRoute({
       return;
     }
 
+    // Block banned accounts immediately
+    if ((user as any).status === "banned") {
+      console.warn(`[ProtectedRoute] ⚠️ Access denied - banned user ${user.id}`);
+      navigate("/access-denied", { replace: true });
+      return;
+    }
+
     // Authenticated but role not allowed
     if (requiredRoles && requiredRoles.length > 0) {
       if (!requiredRoles.includes(user.role)) {

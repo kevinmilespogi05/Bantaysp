@@ -373,6 +373,10 @@ export interface UserProfile {
   avatar: string;
   barangay: string;
   role: string;
+  status?: "active" | "banned";
+  banReason?: string | null;
+  bannedAt?: string | null;
+  bannedBy?: string | null;
   points: number;
   reports: number;
   badge: string;
@@ -454,6 +458,26 @@ export async function fetchAllUsers(): Promise<ApiResponse<UserProfile[]>> {
 
 export async function fetchVerifiedUsers(): Promise<ApiResponse<UserProfile[]>> {
   return apiFetch<UserProfile[]>("/verified-users");
+}
+
+export async function fetchBannedUsers(): Promise<ApiResponse<UserProfile[]>> {
+  return apiFetch<UserProfile[]>("/admin/banned-users");
+}
+
+export async function banUser(userId: string, reason: string): Promise<ApiResponse<{ success: boolean; message: string }>> {
+  return apiFetch<{ success: boolean; message: string }>(
+    "/admin/ban-user",
+    { method: "POST", body: JSON.stringify({ userId, reason }) },
+    true
+  );
+}
+
+export async function unbanUser(userId: string): Promise<ApiResponse<{ success: boolean; message: string }>> {
+  return apiFetch<{ success: boolean; message: string }>(
+    "/admin/unban-user",
+    { method: "POST", body: JSON.stringify({ userId }) },
+    true
+  );
 }
 
 export async function fetchEmergencyContacts(): Promise<ApiResponse<EmergencyContact[]>> {
@@ -1003,6 +1027,12 @@ export interface ResendOtpResponse {
   message: string;
 }
 
+export interface VerificationResult {
+  verified: boolean;
+  status?: "active" | "banned" | "pending";
+  banReason?: string | null;
+}
+
 export interface GenerateOtpData {
   firstName: string;
   lastName: string;
@@ -1041,9 +1071,9 @@ export async function resendOtp(data: ResendOtpData): Promise<ApiResponse<Resend
 }
 
 /** Check if user is verified (exists in user_profiles table) */
-export async function checkUserVerification(userId: string): Promise<ApiResponse<{ verified: boolean }>> {
+export async function checkUserVerification(userId: string): Promise<ApiResponse<VerificationResult>> {
   // Use the backend API to check verification (passes auth token properly)
-  return apiFetch<{ verified: boolean }>(`/auth/check-verification/${userId}`, { method: "GET" });
+  return apiFetch<VerificationResult>(`/auth/check-verification/${userId}`, { method: "GET" });
 }
 
 /** Approve a pending user (move from pending_verification to user_profiles) */
