@@ -40,6 +40,7 @@ export function RegisterPage() {
     phone: "",
     barangay: "Brgy. San Pablo",
     password: "",
+    confirmPassword: "",
   });
 
   const barangays = [
@@ -62,7 +63,7 @@ export function RegisterPage() {
     // Step 1 -> Step 2: Register with backend (generates OTP)
     if (step === 1) {
       // Frontend validation
-      if (!form.firstName || !form.lastName || !form.email || !form.password || !form.barangay) {
+      if (!form.firstName || !form.lastName || !form.email || !form.password || !form.confirmPassword || !form.barangay) {
         setError("Please fill in all required fields");
         return;
       }
@@ -76,6 +77,11 @@ export function RegisterPage() {
 
       if (form.password.length < 6) {
         setError("Password must be at least 6 characters");
+        return;
+      }
+
+      if (form.password !== form.confirmPassword) {
+        setError("Passwords do not match");
         return;
       }
 
@@ -453,22 +459,43 @@ export function RegisterPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type={showPass ? "text" : "password"}
-                        value={form.password}
-                        onChange={(e) => setForm({ ...form, password: e.target.value })}
-                        placeholder="Create a strong password"
-                        className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none bg-white"
-                        onFocus={(e) => (e.target.style.borderColor = "#800000")}
-                        onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
-                      />
-                      <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type={showPass ? "text" : "password"}
+                          value={form.password}
+                          onChange={(e) => setForm({ ...form, password: e.target.value })}
+                          placeholder="Create a strong password"
+                          className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none bg-white"
+                          onFocus={(e) => (e.target.style.borderColor = "#800000")}
+                          onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                        />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                          {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type={showPass ? "text" : "password"}
+                          value={form.confirmPassword}
+                          onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                          placeholder="Confirm your password"
+                          className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none bg-white"
+                          onFocus={(e) => (e.target.style.borderColor = "#800000")}
+                          onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                        />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                          {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
