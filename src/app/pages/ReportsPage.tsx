@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useSearch } from "../context/SearchContext";
 import { useAuth } from "../context/AuthContext";
+import { useRealtime } from "../context/RealtimeContext";
 import {
   useApi, fetchReports, fetchComments, fetchUserUpvotes,
   upvoteReport, addComment, updateReportStatus,
@@ -51,6 +52,7 @@ const REPORT_CATEGORIES = [
 export function ReportsPage() {
   const navigate = useNavigate();  const { id: reportIdFromUrl } = useParams<{ id: string }>();  const { user } = useAuth();
   const { debouncedQuery } = useSearch();
+  const { reportsVersion } = useRealtime();
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -74,6 +76,12 @@ export function ReportsPage() {
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const { data: reports, loading: reportsLoading, error: reportsError, refetch } = useApi(fetchReports);
+
+  useEffect(() => {
+    if (reportsVersion === 0) return;
+    const timeout = window.setTimeout(() => refetch(), 350);
+    return () => window.clearTimeout(timeout);
+  }, [refetch, reportsVersion]);
 
   // Fetch comments for selected report
   const { data: fetchedComments, loading: commentsLoading } = useApi(

@@ -16,6 +16,7 @@ import {
   type PatrolUnit as PatrolUnitData, type IncidentPin as IncidentLocation, type PatrolDispatchMessage as PatrolMessage, type Report,
 } from "../../services/api";
 import { SkeletonCard, EmptyState } from "../../components/ui/DataStates";
+import { useRealtime } from "../../context/RealtimeContext";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,7 +37,10 @@ function timeAgo(iso: string) {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 2592000) return `${Math.floor(diff / 604800)}w ago`;
+  return `${Math.floor(diff / 2592000)}mo ago`;
 }
 
 function formatTime(iso: string) {
@@ -53,6 +57,29 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function findPatrolUnitByIdentifier(units: PatrolUnitData[], identifier?: string | null) {
+  if (!identifier) return undefined;
+
+  const normalized = identifier.startsWith("patrol-") ? identifier.slice(7) : identifier;
+  const candidates = new Set<string>([
+    identifier,
+    normalized,
+    `patrol-${normalized}`,
+  ]);
+
+  return units.find((u) => {
+    if (candidates.has(u.id)) return true;
+    if (u.user_id && candidates.has(u.user_id)) return true;
+    if (u.id.startsWith("patrol-") && candidates.has(u.id.slice(7))) return true;
+    return false;
+  });
+}
+
+function getAssignedPatrolName(units: PatrolUnitData[], identifier?: string | null, fallbackName?: string | null) {
+  const patrol = findPatrolUnitByIdentifier(units, identifier);
+  return patrol?.name || fallbackName || "Unknown patrol";
 }
 
 // ─── Map controller (programmatic pan/zoom) ───────────────────────────────────
@@ -136,11 +163,13 @@ type PanelTab = "units" | "cases" | "history" | "messages" | "stats";
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function AdminPatrolMonitoring() {
+  const { connectionStatus, reportsVersion, onlinePatrol } = useRealtime();
+
   // ── Fetch via API service layer (swap fetchers for real endpoints in prod) ──
-  const { data: unitsData }     = useApi(fetchPatrolUnits);
-  const { data: incidentsData } = useApi(fetchIncidentPins);
+  const { data: unitsData, refetch: refetchUnits }         = useApi(fetchPatrolUnits);
+  const { data: incidentsData, refetch: refetchIncidents } = useApi(fetchIncidentPins);
   const { data: messagesData }  = useApi(fetchDispatchMessages);
-  const { data: reportsData }   = useApi(fetchReports);
+  const { data: reportsData, refetch: refetchReports }     = useApi(fetchReports);
 
   // Local state seeded from API — allows real-time mutations (reassign, send)
   const [units,     setUnits]     = useState<PatrolUnitData[]>([]);
@@ -152,6 +181,18 @@ export function AdminPatrolMonitoring() {
   useEffect(() => { if (incidentsData) setIncidents(incidentsData); }, [incidentsData]);
   useEffect(() => { if (messagesData)  setMessages(messagesData);   }, [messagesData]);
   useEffect(() => { if (reportsData)   setReports(reportsData);     }, [reportsData]);
+
+  useEffect(() => {
+    if (reportsVersion === 0) return;
+
+    const timeout = window.setTimeout(() => {
+      refetchReports();
+      refetchIncidents();
+      refetchUnits();
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [refetchIncidents, refetchReports, refetchUnits, reportsVersion]);
 
   const [selectedPatrol, setSelectedPatrol] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
@@ -220,6 +261,23 @@ export function AdminPatrolMonitoring() {
     msgEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Refetch patrol units to get fresh user_id data (workaround for stale data)
+  const refreshPatrolUnits = async () => {
+    console.log("[AdminPatrolMonitoring] 🔄 Forcing refresh of patrol units...");
+    const { data: fresh } = await fetchPatrolUnits();
+    if (fresh) {
+      setUnits(fresh);
+      console.log("[AdminPatrolMonitoring] ✅ Fresh patrol units loaded:", fresh.length, "units");
+      fresh.forEach((u: any) => {
+        if (u.user_id) {
+          console.log(`  ✅ ${u.name}: user_id present (${u.user_id.substring(0, 8)}...)`);
+        } else {
+          console.warn(`  ❌ ${u.name}: NO user_id - database might need population`);
+        }
+      });
+    }
+  };
+
   // Focus map on patrol
   const focusPatrol = useCallback(
     (id: string) => {
@@ -265,12 +323,30 @@ export function AdminPatrolMonitoring() {
       return;
     }
 
-    // Optimistic update - update both incidents and reports
+    // Use user_id if available, otherwise fall back to unit.id
+    // TODO: Backend should include user_id in patrol units response
+    const patrolUserUUID = unit.user_id || unit.id;
+    
+    console.log("[confirmAssignPatrol] Assigning patrol:", {
+      patrolName: unit.name,
+      unitId: unit.id,
+      patrolUserUUID: patrolUserUUID,
+      hasUserIdField: !!unit.user_id,
+      incidentId: assigningFor,
+      incidentTitle: inc.title,
+    });
+
+    if (!unit.user_id) {
+      console.warn("[confirmAssignPatrol] ⚠️ Backend missing user_id field. Using unit.id as fallback.");
+      console.warn("[confirmAssignPatrol] Backend needs to be updated to include user_id in patrol units response");
+    }
+
+    // Optimistic update - use patrolUserUUID for storage
     setIncidents((prev) =>
-      prev.map((i) => i.id === assigningFor ? { ...i, assignedPatrol: selectedPatrolForAssignment, status: "assigned" as const } : i)
+      prev.map((i) => i.id === assigningFor ? { ...i, assignedPatrol: patrolUserUUID, status: "assigned" as const } : i)
     );
     setReports((prev) =>
-      prev.map((r) => r.id === assigningFor ? { ...r, assignedPatrol: selectedPatrolForAssignment, status: "in_progress" as const } : r)
+      prev.map((r) => r.id === assigningFor ? { ...r, assignedPatrol: patrolUserUUID, status: "in_progress" as const } : r)
     );
     setUnits((prev) =>
       prev.map((u) => u.id === selectedPatrolForAssignment
@@ -278,13 +354,15 @@ export function AdminPatrolMonitoring() {
         : u)
     );
 
-    // Persist to server
+    // Persist to server - use patrolUserUUID for the assignment
     await Promise.all([
-      updatePatrolIncident(assigningFor, { assignedPatrol: selectedPatrolForAssignment, status: "assigned" } as any),
+      updatePatrolIncident(assigningFor, { assignedPatrol: patrolUserUUID, status: "assigned" } as any),
       updatePatrolUnit(selectedPatrolForAssignment, { status: "en_route", currentCase: assigningFor, currentCaseTitle: inc?.title || null } as any),
     ]);
 
-    // Send dispatch message
+    console.log("[confirmAssignPatrol] ✅ Assignment saved with patrol identifier:", patrolUserUUID);
+
+    // Send dispatch message - use unit.id for messaging
     const { data: sent } = await sendPatrolMessage({
       from: "admin", to: selectedPatrolForAssignment,
       message: `Dispatch: Assigned to case – ${inc.title}. Proceed immediately.`,
@@ -330,6 +408,83 @@ export function AdminPatrolMonitoring() {
   const markUnavailable = async (id: string) => {
     setUnits((prev) => prev.map((u) => u.id === id ? { ...u, status: "offline" as const } : u));
     await updatePatrolUnit(id, { status: "offline", currentCase: null, currentCaseTitle: null } as any);
+  };
+
+  // Mark patrol available — persists to server
+  const markAvailable = async (id: string) => {
+    setUnits((prev) => prev.map((u) => u.id === id ? { ...u, status: "available" as const } : u));
+    await updatePatrolUnit(id, { status: "available" } as any);
+  };
+
+  // Unassign patrol from report — persists to server
+  const unassignPatrol = async (id: string) => {
+    // Find in either reports or incidents
+    const report = reports.find((r) => r.id === id);
+    const incident = incidents.find((i) => i.id === id);
+    const item = report || incident;
+    const patrolIdentifier = item?.assignedPatrol; // This is the unit ID or user UUID
+
+    if (!item) {
+      console.error("[unassignPatrol] Item not found with ID:", id);
+      console.error("[unassignPatrol] Available reports:", reports.map(r => ({ id: r.id, title: r.title })));
+      console.error("[unassignPatrol] Available incidents:", incidents.map(i => ({ id: i.id, title: i.title })));
+      return;
+    }
+
+    if (!patrolIdentifier) {
+      console.error("[unassignPatrol] Patrol identifier not found for item:", item);
+      return;
+    }
+
+    // Find the unit by ID or user UUID (assignedPatrol may store either)
+    const unit = findPatrolUnitByIdentifier(units, patrolIdentifier);
+    if (!unit) {
+      console.error("[unassignPatrol] Patrol unit not found for identifier:", patrolIdentifier);
+      console.error("[unassignPatrol] Available units:", units.map(u => ({ id: u.id, user_id: u.user_id, name: u.name })));
+      return;
+    }
+
+    console.log("[unassignPatrol] Unassigning patrol:", {
+      patrolIdentifier: patrolIdentifier,
+      unitId: unit.id,
+      unitName: unit.name,
+      itemId: id,
+      itemTitle: item.title,
+    });
+
+    // Optimistic update
+    setReports((prev) =>
+      prev.map((r) => r.id === id ? { ...r, assignedPatrol: null, status: "approved" as const } : r)
+    );
+    setIncidents((prev) =>
+      prev.map((i) => i.id === id ? { ...i, assignedPatrol: null, status: "pending" as const } : i)
+    );
+    setUnits((prev) =>
+      prev.map((u) => u.id === unit.id ? { ...u, status: "available" as const, currentCase: null, currentCaseTitle: null } : u)
+    );
+
+    // Persist to server
+    if (report) {
+      // For reports, just update the patrol unit to clear the assignment
+      await updatePatrolUnit(unit.id, { status: "available", currentCase: null, currentCaseTitle: null } as any);
+    } else if (incident) {
+      // For incidents, update both the incident and patrol unit
+      await Promise.all([
+        updatePatrolIncident(id, { assignedPatrol: null, status: "pending" } as any),
+        updatePatrolUnit(unit.id, { status: "available", currentCase: null, currentCaseTitle: null } as any),
+      ]);
+    }
+
+    console.log("[unassignPatrol] ✅ Assignment removed");
+
+    // Send notification message
+    await sendPatrolMessage({
+      from: "admin",
+      to: unit.id,
+      message: `Assignment cancelled: Case "${item.title}" has been unassigned.`,
+    });
+
+    setSelectedIncident(null);
   };
 
   // Stats
@@ -459,13 +614,25 @@ export function AdminPatrolMonitoring() {
                     >
                       <MessageSquare className="w-3 h-3" /> Message
                     </button>
-                    <button
-                      onClick={() => markUnavailable(unit.id)}
-                      className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-gray-300 transition-all"
-                      style={{ background: "rgba(255,255,255,0.07)", fontSize: 11 }}
-                    >
-                      <UserX className="w-3 h-3" />
-                    </button>
+                    {unit.status === "offline" ? (
+                      <button
+                        onClick={() => markAvailable(unit.id)}
+                        className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg transition-all"
+                        style={{ background: "rgba(34,197,94,0.12)", color: "#86efac", fontSize: 11 }}
+                        title="Restore to available"
+                      >
+                        <Radio className="w-3 h-3" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => markUnavailable(unit.id)}
+                        className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-gray-300 transition-all"
+                        style={{ background: "rgba(255,255,255,0.07)", fontSize: 11 }}
+                        title="Mark offline"
+                      >
+                        <UserX className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </Popup>
@@ -491,10 +658,19 @@ export function AdminPatrolMonitoring() {
                   <div className="text-white font-semibold mb-1" style={{ fontSize: 12 }}>{inc.title}</div>
                   <div className="text-gray-400" style={{ fontSize: 10 }}>{inc.address}</div>
                   {inc.assignedPatrol ? (
-                    <div className="mt-2 rounded-lg px-2 py-1" style={{ background: "rgba(34,197,94,0.12)" }}>
-                      <span className="text-green-400" style={{ fontSize: 10 }}>
-                        ✓ Assigned to {units.find((u) => u.id === inc.assignedPatrol)?.name || inc.assignedPatrol}
-                      </span>
+                    <div className="mt-2 space-y-1.5">
+                      <div className="rounded-lg px-2 py-1" style={{ background: "rgba(34,197,94,0.12)" }}>
+                        <span className="text-green-400" style={{ fontSize: 10 }}>
+                          ✓ Assigned to {getAssignedPatrolName(units, inc.assignedPatrol, inc.assigned_patrol_name ?? null)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => unassignPatrol(inc.id)}
+                        className="w-full py-1 rounded-lg text-white transition-all text-xs font-semibold"
+                        style={{ background: "rgba(249,115,22,0.3)", border: "1px solid rgba(249,115,22,0.5)", color: "#fed7aa" }}
+                      >
+                        Unassign
+                      </button>
                     </div>
                   ) : (
                     <button
@@ -695,6 +871,14 @@ export function AdminPatrolMonitoring() {
               {unreadCount}
             </div>
           )}
+          <button
+            onClick={refreshPatrolUnits}
+            className="p-2 rounded-lg transition-all hover:bg-slate-700 active:scale-95"
+            style={{ background: "rgba(255,255,255,0.06)" }}
+            title="Refresh patrol units data (fixes stale user_id)"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-gray-400" />
+          </button>
         </div>
 
         {/* Quick Stats Row */}
@@ -881,13 +1065,25 @@ export function AdminPatrolMonitoring() {
                             >
                               <Target className="w-3 h-3" /> Focus
                             </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); markUnavailable(unit.id); }}
-                              className="flex items-center justify-center px-2 py-1.5 rounded-lg transition-all hover:opacity-90"
-                              style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", fontSize: 10 }}
-                            >
-                              <UserX className="w-3 h-3" />
-                            </button>
+                            {unit.status === "offline" ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); markAvailable(unit.id); }}
+                                className="flex items-center justify-center px-2 py-1.5 rounded-lg transition-all hover:opacity-90"
+                                style={{ background: "rgba(34,197,94,0.12)", color: "#86efac", fontSize: 10 }}
+                                title="Restore to available"
+                              >
+                                <Radio className="w-3 h-3" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); markUnavailable(unit.id); }}
+                                className="flex items-center justify-center px-2 py-1.5 rounded-lg transition-all hover:opacity-90"
+                                style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", fontSize: 10 }}
+                                title="Mark offline"
+                              >
+                                <UserX className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                           <div className="grid grid-cols-3 gap-1.5 mt-1.5">
                             {[
@@ -953,7 +1149,10 @@ export function AdminPatrolMonitoring() {
                   </div>
 
                   <button
-                    onClick={() => setAssigningFor(null)}
+                    onClick={() => {
+                      setAssigningFor(null);
+                      setSelectedPatrolForAssignment(null);
+                    }}
                     className="w-full mt-2.5 py-1.5 rounded-lg text-gray-400 text-xs transition-all hover:text-gray-300 font-medium"
                     style={{ background: "rgba(255,255,255,0.04)" }}
                   >
@@ -1035,7 +1234,7 @@ export function AdminPatrolMonitoring() {
                                 </span>
                               </div>
 
-                              {/* Assign button when selected */}
+                              {/* Assign button when selected and no patrol assigned */}
                               {selectedIncident === report.id && !report.assignedPatrol && report.status === "approved" && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setAssigningFor(report.id); }}
@@ -1043,6 +1242,17 @@ export function AdminPatrolMonitoring() {
                                   style={{ background: "rgba(128,0,0,0.3)", border: "1px solid rgba(128,0,0,0.5)" }}
                                 >
                                   <Zap className="w-3 h-3" /> Assign Patrol
+                                </button>
+                              )}
+
+                              {/* Unassign button when selected and patrol is assigned */}
+                              {selectedIncident === report.id && report.assignedPatrol && report.status === "in_progress" && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); unassignPatrol(report.id); }}
+                                  className="w-full mt-2 py-1.5 rounded-lg text-white transition-all hover:bg-orange-600/40 text-xs font-semibold flex items-center justify-center gap-1"
+                                  style={{ background: "rgba(249,115,22,0.3)", border: "1px solid rgba(249,115,22,0.5)" }}
+                                >
+                                  <UserX className="w-3 h-3" /> Unassign Patrol
                                 </button>
                               )}
                             </div>
@@ -1419,7 +1629,11 @@ export function AdminPatrolMonitoring() {
                 {/* Buttons */}
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setShowConfirmAssignment(false)}
+                    onClick={() => {
+                      setShowConfirmAssignment(false);
+                      setAssigningFor(null);
+                      setSelectedPatrolForAssignment(null);
+                    }}
                     className="flex-1 py-2 rounded-lg text-gray-300 transition-all hover:bg-slate-700"
                     style={{ background: "rgba(255,255,255,0.06)" }}
                   >

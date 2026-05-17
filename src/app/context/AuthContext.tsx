@@ -25,6 +25,7 @@ import {
 import { useNavigate } from "react-router";
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
+import * as roleCache from "@/lib/roleCache";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,15 @@ export interface AuthUser {
   role: UserRole;
   barangay: string;
   status: "active" | "banned";
+  /**
+   * CRITICAL: Track whether role is confirmed from database or still pending.
+   * 
+   * isRoleConfirmed = false: Role is temporary (default "resident" during session restore)
+   * isRoleConfirmed = true: Role is confirmed from database and can be trusted
+   * 
+   * Permission checks must WAIT until isRoleConfirmed = true to prevent false redirects.
+   */
+  isRoleConfirmed: boolean;
 }
 
 // ─── Helper: Create base user from Supabase User (non-blocking) ────────────────
@@ -53,9 +63,10 @@ function mapSupabaseUser(user: User): AuthUser {
     first_name: firstName,
     last_name: lastName,
     avatar: meta.avatar ?? (fullName ? fullName.slice(0, 2).toUpperCase() : "?"),
-    role: "resident", // Default to resident until DB confirms role
+    role: "resident", // Temporary default - role is NOT yet confirmed
     barangay: meta.barangay ?? "",
     status: "active",
+    isRoleConfirmed: false, // CRITICAL: Mark role as unconfirmed (will be confirmed by enrichment)
   };
 }
 
@@ -147,6 +158,7 @@ async function enrichUserWithDatabaseProfile(
         role: (profile.role as UserRole) || "resident",
         barangay: profile.barangay || "",
         status: (profile.status as "active" | "banned") || "active",
+        isRoleConfirmed: true, // CRITICAL: Role is now confirmed from database
       };
     } catch (err) {
       clearTimeout(timeoutId);
@@ -181,6 +193,8 @@ const GUEST_USER: AuthUser = {
   avatar: "G",
   role: "resident",
   barangay: "",
+  status: "active",
+  isRoleConfirmed: false,
 };
 
 // ─── Context shape ────────────────────────────────────────────────────────────
@@ -286,6 +300,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             enrichedProfileUserIdRef.current = enrichedUser.id;
             currentUserRef.current = enrichedUser;
             setUser(enrichedUser);
+            // Cache the confirmed role for fast re-renders on future page loads
+            roleCache.setLastKnownRole(enrichedUser.role);
           }).finally(() => {
             if (!isMounted) return;
             enrichmentInFlightUserIdRef.current = null;
@@ -390,6 +406,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               enrichedProfileUserIdRef.current = enrichedUser.id;
               currentUserRef.current = enrichedUser;
               setUser(enrichedUser);
+              // Cache the confirmed role for fast re-renders on future page loads
+              roleCache.setLastKnownRole(enrichedUser.role);
             }).finally(() => {
               if (!isMounted) return;
               enrichmentInFlightUserIdRef.current = null;
@@ -457,6 +475,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setUser(GUEST_USER);
     setSession(null);
+    // Clear the cached role to prevent the next user seeing the previous user's role
+    roleCache.clear();
   };
 
   const refreshRole = async () => {

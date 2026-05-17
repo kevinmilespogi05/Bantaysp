@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
@@ -44,6 +44,7 @@ import { ImageViewerModal } from "../components/ui/ImageViewerModal";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { useRealtime } from "../context/RealtimeContext";
 import { BantayLogo } from "../components/ui/BantayLogo";
 import { UsersTab } from "../components/admin/UsersTab";
 import { ReportGenerationModal } from "../components/admin/ReportGenerationModal";
@@ -76,6 +77,7 @@ export function AdminDashboard() {
   const navigate = useNavigate();
   const { isAdmin, session } = useAuth();
   const { showToast } = useToast();
+  const { connectionStatus, reportsVersion, onlinePatrol } = useRealtime();
   // Stable token string used as a re-fetch trigger: when a session token
   // arrives after login, all useApi hooks will automatically re-fetch.
   const sessionToken = session?.access_token ?? null;
@@ -141,6 +143,19 @@ export function AdminDashboard() {
   const { data: categoryData } = useApi(memoFetchCategoryData, [sessionToken]);
   const { data: leaderboard, loading: lbLoading } = useApi(memoFetchLeaderboard, [sessionToken]);
   const { data: pendingUsers, loading: pendingUsersLoading, refetch: refetchPendingUsers } = useApi(memoFetchAllUsers, [sessionToken]);
+
+  useEffect(() => {
+    if (reportsVersion === 0) return;
+
+    const timeout = window.setTimeout(() => {
+      refetchReports();
+      refetchPendingReports();
+      refetchSubmittedReports();
+      retryStats();
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [refetchPendingReports, refetchReports, refetchSubmittedReports, reportsVersion, retryStats]);
 
   const filteredReports = (reports ?? []).filter(
     (r) =>
@@ -403,6 +418,13 @@ export function AdminDashboard() {
         </div>
 
         {/* Export & Settings — admin only */}
+        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
+          <span className={`h-2 w-2 rounded-full ${connectionStatus === "connected" ? "bg-green-500" : connectionStatus === "offline" || connectionStatus === "error" ? "bg-red-500" : "bg-amber-500"}`} />
+          <span>{connectionStatus === "connected" ? "Live sync active" : connectionStatus === "offline" ? "Offline mode" : "Reconnecting live sync"}</span>
+          <span className="text-gray-300">|</span>
+          <span>{onlinePatrol.length} patrol online</span>
+        </div>
+
         {isAdmin && (
           <div className="md:ml-auto flex gap-2">
             <button 

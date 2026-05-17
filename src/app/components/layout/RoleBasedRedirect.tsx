@@ -8,27 +8,48 @@ import { useAuth } from "../../context/AuthContext";
  * Admin → /app/admin
  * Patrol → /app/patrol/dashboard
  * Resident → /app/dashboard
+ * 
+ * CRITICAL: Must wait for isEnriching=false before redirecting to ensure role is confirmed
+ * from database. This prevents false redirects when user's default role is "resident".
  */
 export function RoleBasedRedirect() {
   const { user, isLoading, isEnriching } = useAuth();
 
   console.log("[RoleBasedRedirect] Evaluating route redirect", {
     userRole: user.role,
+    isRoleConfirmed: user.isRoleConfirmed,
     isLoading,
     isEnriching,
   });
 
-  // Show loading screen while auth data is being fetched
-  if (isLoading || isEnriching) {
+  // ─── PHASE 1: Session Restoration ─────────────────────────────────────────
+  // Wait for Supabase session to be restored
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-white">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-gray-200 border-t-red-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 text-sm">Loading...</p>
+          <p className="text-gray-600 text-sm">Restoring session...</p>
         </div>
       </div>
     );
   }
+
+  // ─── PHASE 2: Role Confirmation (CRITICAL FIX) ─────────────────────────────
+  // NEVER redirect based on unconfirmed role
+  // Wait for database role confirmation before deciding destination
+  if (!user.isRoleConfirmed) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-white">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-red-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 text-sm">Confirming your role...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PHASE 3: Role-Based Redirect (role is now confirmed from database) ─────
 
   // Admin always goes to admin dashboard
   if (user.role === "admin") {

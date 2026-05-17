@@ -31,44 +31,49 @@ export function RoleGuard({ allow, fallback = "/app/dashboard", children }: Role
 
   console.log("[RoleGuard] Evaluating access control", {
     userRole: user.role,
+    isRoleConfirmed: user.isRoleConfirmed,
     allowedRoles: allow,
-    isAllowed: allow.includes(user.role),
+    isAllowed: user.isRoleConfirmed ? allow.includes(user.role) : "pending",
     isLoading,
     isEnriching,
     fallback,
   });
 
-  // Show loading screen while session is being restored
+  // ─── PHASE 1: Session Restoration ─────────────────────────────────────────
+  // Session not yet restored, show loading screen
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-white dark:bg-slate-900">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-gray-200 dark:border-slate-700 border-t-red-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-slate-400 text-sm">Loading...</p>
+          <p className="text-gray-600 dark:text-slate-400 text-sm">Loading session...</p>
         </div>
       </div>
     );
   }
 
-  // Show loading screen while enriching IF current role doesn't match allowed roles
-  // This prevents admins from being redirected while their role is still loading from DB
-  if (isEnriching && !allow.includes(user.role)) {
+  // ─── PHASE 2: Role Confirmation (CRITICAL FIX) ────────────────────────────
+  // NEVER evaluate permissions until role is confirmed from database
+  // The temporary role is just a placeholder and cannot be trusted
+  if (!user.isRoleConfirmed) {
     return (
       <div className="flex items-center justify-center h-screen bg-white dark:bg-slate-900">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-gray-200 dark:border-slate-700 border-t-red-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-slate-400 text-sm">Verifying permissions...</p>
+          <p className="text-gray-600 dark:text-slate-400 text-sm">Confirming your role...</p>
         </div>
       </div>
     );
   }
 
-  // Permission check: if user role is not allowed, redirect to fallback
+  // ─── PHASE 3: Permission Check (only after role confirmed) ──────────────────
+  // Safe to check permissions now - role is confirmed from database
   if (!allow.includes(user.role)) {
     console.log("[RoleGuard] Access denied, redirecting to fallback", { userRole: user.role, fallback });
     return <Navigate to={fallback} replace />;
   }
 
+  // ─── PHASE 4: Access Granted ──────────────────────────────────────────────
   console.log("[RoleGuard] Access granted");
   return <>{children}</>;
 }

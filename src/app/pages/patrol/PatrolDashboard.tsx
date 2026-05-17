@@ -8,6 +8,7 @@ import {
   ClipboardList, ArrowRight, LogOut, Loader, Image as ImageIcon, X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useRealtime } from "../../context/RealtimeContext";
 import { useApi, fetchActiveCase, fetchAssignedReports, fetchPatrolStats, fetchPatrolHistory, cancelPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary, addPatrolComment } from "../../services/api";
 import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataStates";
 
@@ -33,6 +34,7 @@ function timeAgo(dateStr: string) {
 export function PatrolDashboard() {
   const navigate = useNavigate();
   const { user, session } = useAuth();
+  const { connectionStatus, reportsVersion, onlineAdmins } = useRealtime();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,9 +57,22 @@ export function PatrolDashboard() {
 
   // ── Data from API service ─────────────────────────────────────────────────
   const { data: activeCase, loading: caseLoading, refetch: refetchActiveCase } = useApi(() => fetchActiveCase(user.id));
-  const { data: assignedReports, loading: assignedLoading } = useApi(fetchAssignedReports);
-  const { data: patrolStats, loading: statsLoading } = useApi(fetchPatrolStats);
-  const { data: patrolHistory, loading: historyLoading } = useApi(fetchPatrolHistory);
+  const { data: assignedReports, loading: assignedLoading, refetch: refetchAssignedReports } = useApi(fetchAssignedReports);
+  const { data: patrolStats, loading: statsLoading, refetch: refetchPatrolStats } = useApi(fetchPatrolStats);
+  const { data: patrolHistory, loading: historyLoading, refetch: refetchPatrolHistory } = useApi(fetchPatrolHistory);
+
+  useEffect(() => {
+    if (reportsVersion === 0) return;
+
+    const timeout = window.setTimeout(() => {
+      refetchActiveCase();
+      refetchAssignedReports();
+      refetchPatrolStats();
+      refetchPatrolHistory();
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [refetchActiveCase, refetchAssignedReports, refetchPatrolHistory, refetchPatrolStats, reportsVersion]);
 
   // Attach stream to video element when camera becomes active
   useEffect(() => {
@@ -266,6 +281,12 @@ export function PatrolDashboard() {
           <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse shrink-0" />
           <span className="text-green-400 text-xs font-semibold">ON DUTY</span>
           <span className="text-slate-600 text-xs hidden xs:block">·</span>
+          <span className={`text-xs font-semibold ${connectionStatus === "connected" ? "text-green-400" : connectionStatus === "offline" || connectionStatus === "error" ? "text-red-400" : "text-amber-400"}`}>
+            {connectionStatus === "connected" ? "LIVE" : connectionStatus === "offline" ? "OFFLINE" : "SYNCING"}
+          </span>
+          <span className="text-slate-600 text-xs hidden xs:block">Â·</span>
+          <span className="text-slate-400 text-xs">{onlineAdmins.length} admin online</span>
+          <span className="text-slate-600 text-xs hidden sm:block">Â·</span>
           <span className="text-slate-300 text-xs">{user.unit}</span>
           <span className="text-slate-600 text-xs hidden sm:block">·</span>
           <span className="text-slate-400 text-xs hidden sm:block">{user.badgeNumber}</span>

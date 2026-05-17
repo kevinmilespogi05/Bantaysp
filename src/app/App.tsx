@@ -2,6 +2,7 @@ import { RouterProvider } from "react-router";
 import { router } from "./routes";
 import { AuthProvider } from "./context/AuthContext";
 import { ToastProvider, useToast } from "./context/ToastContext";
+import { RealtimeProvider } from "./context/RealtimeContext";
 import { ToastContainer } from "./components/ui/Toast";
 
 function AppContent() {
@@ -18,7 +19,9 @@ export default function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <AppContent />
+        <RealtimeProvider>
+          <AppContent />
+        </RealtimeProvider>
       </AuthProvider>
     </ToastProvider>
   );

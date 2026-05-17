@@ -4373,9 +4373,22 @@ app.get("/patrol/units", async (req, res) => {
 
     if (error) throw error;
 
+    // DEBUG: Log raw database response to check if user_id column exists
+    if (units && units.length > 0) {
+      const firstUnit = units[0];
+      console.log(`[PatrolUnits] 🔍 Raw database response (first unit):`, {
+        columns: Object.keys(firstUnit),
+        hasUserIdColumn: 'user_id' in firstUnit,
+        user_id: firstUnit.user_id,
+        id: firstUnit.id,
+        name: firstUnit.name,
+      });
+    }
+
     // Transform database format to API format
     const transformedUnits = (units || []).map((unit: any) => ({
       id: unit.id,
+      user_id: unit.user_id, // ✅ Include user_id for proper assignment resolution
       name: unit.name,
       avatar: unit.avatar,
       unit: unit.unit,
@@ -4393,7 +4406,7 @@ app.get("/patrol/units", async (req, res) => {
       shiftEnd: unit.shift_end,
     }));
 
-    console.log(`[PatrolUnits] ✅ Returning ${transformedUnits.length} patrol units`);
+    console.log(`[PatrolUnits] ✅ Returning ${transformedUnits.length} patrol units with user_id field`);
     res.json(transformedUnits);
   } catch (err) {
     console.error(`[PatrolUnits] Error:`, err);
@@ -4478,7 +4491,10 @@ app.put("/patrol/incidents/:id", async (req, res) => {
     const { id } = req.params;
     const { status, assignedPatrol } = req.body;
 
-    console.log(`[PatrolIncidentUpdate] Updating incident ${id} with:`, { status, assignedPatrol });
+    console.log(`\n[PatrolIncidentUpdate] ──────────────────────────────────────`);
+    console.log(`[PatrolIncidentUpdate] Incident: ${id}`);
+    console.log(`[PatrolIncidentUpdate] Status: ${status}`);
+    console.log(`[PatrolIncidentUpdate] AssignedPatrol (type=${typeof assignedPatrol}): ${assignedPatrol}`);
 
     if (!id) {
       return res.status(400).json({ error: "Missing incident ID" });
@@ -4496,15 +4512,55 @@ app.put("/patrol/incidents/:id", async (req, res) => {
       updateData.status = statusMap[status] || status;
     }
     
-    // If assignedPatrol looks like "patrol-{uuid}", extract the uuid part
+    // If assignedPatrol is provided, look up the patrol unit to get the user_id
     if (assignedPatrol) {
-      if (assignedPatrol.startsWith("patrol-")) {
-        // Extract user UUID from "patrol-{uuid}"
-        const userUuid = assignedPatrol.substring(7); // Remove "patrol-" prefix
-        console.log(`[PatrolIncidentUpdate] Extracted user UUID from patrol ID:`, userUuid);
-        updateData.patrol_assigned_to = userUuid;
+      console.log(`[PatrolIncidentUpdate] Processing assignedPatrol:`, assignedPatrol);
+      
+      // Try to fetch the patrol unit to get its user_id
+      const { data: patrolUnit, error: unitError } = await supabase
+        .from("patrol_units")
+        .select("id, user_id")
+        .eq("id", assignedPatrol)
+        .single();
+      
+      console.log(`[PatrolIncidentUpdate] Lookup result:`, { patrolUnit, error: unitError?.message });
+      
+      if (unitError) {
+        console.warn(`[PatrolIncidentUpdate] ⚠️ Patrol unit lookup failed:`, unitError.message);
+        
+        // Check if the error is due to missing user_id column
+        if (unitError.message.includes("column") && unitError.message.includes("user_id")) {
+          console.error(`[PatrolIncidentUpdate] ❌ user_id column doesn't exist in patrol_units table`);
+          console.error(`[PatrolIncidentUpdate] 📋 Run migration: supabase migration up --db-url (or apply 027_add_user_id_to_patrol_units.sql manually)`);
+          throw new Error(`Database schema error: user_id column missing from patrol_units table. Apply migration 027_add_user_id_to_patrol_units.sql`);
+        }
+        
+        // Check if assignedPatrol is already a valid UUID (frontend sent user_id directly)
+        if (assignedPatrol.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+          console.log(`[PatrolIncidentUpdate] ✅ Using assignedPatrol as direct UUID:`, assignedPatrol);
+          updateData.patrol_assigned_to = assignedPatrol;
+        } else {
+          console.error(`[PatrolIncidentUpdate] ❌ Cannot resolve patrol unit:`, assignedPatrol);
+          throw new Error(`Patrol unit '${assignedPatrol}' not found. Make sure it exists in patrol_units table.`);
+        }
+      } else if (patrolUnit?.user_id) {
+        console.log(`[PatrolIncidentUpdate] ✅ Resolved patrol unit ${assignedPatrol} to auth user ${patrolUnit.user_id}`);
+        updateData.patrol_assigned_to = patrolUnit.user_id;
+      } else if (patrolUnit) {
+        console.warn(`[PatrolIncidentUpdate] ⚠️ Patrol unit found but user_id is NULL/not set`);
+        console.warn(`[PatrolIncidentUpdate] 📋 Please run: UPDATE patrol_units SET user_id = (SELECT id FROM auth.users WHERE ...) WHERE user_id IS NULL`);
+        
+        // Attempt fallback: if unit ID looks like a UUID, use it directly
+        const isUuid = assignedPatrol.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+        if (isUuid) {
+          console.log(`[PatrolIncidentUpdate] ✅ Unit ID is UUID format, using as patrol_assigned_to`);
+          updateData.patrol_assigned_to = assignedPatrol;
+        } else {
+          console.error(`[PatrolIncidentUpdate] ❌ Unit ID is not UUID format and user_id is not set: ${assignedPatrol}`);
+          throw new Error(`Cannot assign patrol: unit '${assignedPatrol}' has no user_id link. Please populate patrol_units.user_id with auth.users.id`);
+        }
       } else {
-        updateData.patrol_assigned_to = assignedPatrol;
+        throw new Error(`Patrol unit '${assignedPatrol}' not found in database`);
       }
     }
 
@@ -4512,7 +4568,8 @@ app.put("/patrol/incidents/:id", async (req, res) => {
       return res.status(400).json({ error: "No fields to update" });
     }
 
-    console.log(`[PatrolIncidentUpdate] Executing update with data:`, updateData);
+    console.log(`[PatrolIncidentUpdate] Final updateData:`, updateData);
+    console.log(`[PatrolIncidentUpdate] Executing Supabase query...`);
 
     const { data, error } = await supabase
       .from("reports")

@@ -3,12 +3,16 @@ import { Check, AlertCircle, Info, X, AlertTriangle } from "lucide-react";
 import { useEffect } from "react";
 
 export type ToastType = "success" | "error" | "info" | "warning" | "loading";
+export type ToastPriority = "low" | "normal" | "high";
 
 export interface ToastMessage {
   id: string;
   message: string;
   type: ToastType;
   duration?: number;
+  priority?: ToastPriority;
+  dedupeKey?: string;
+  createdAt?: number;
 }
 
 interface ToastItemProps {
@@ -71,7 +75,7 @@ function ToastItem({ toast, onClose }: ToastItemProps) {
       animate={{ opacity: 1, y: 0, x: 0 }}
       exit={{ opacity: 0, y: -20, x: 100 }}
       transition={{ type: "spring", stiffness: 300, damping: 25 }}
-      className={`${config.bg} ${config.border} border rounded-xl p-4 shadow-lg backdrop-blur-sm flex items-start gap-3 min-w-96 max-w-md`}
+      className={`relative ${config.bg} ${config.border} border rounded-xl p-4 shadow-lg backdrop-blur-sm flex items-start gap-3 min-w-96 max-w-md`}
     >
       <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${config.iconColor}`} />
       <div className="flex-1 min-w-0">

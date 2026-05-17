@@ -6,7 +6,7 @@
  * called from event handlers.
  */
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
 // ─── Base HTTP config ─────────────────────────────────────────────────────────
@@ -244,6 +244,7 @@ export type PatrolStatus = "available" | "en_route" | "busy" | "offline";
 
 export interface PatrolUnit {
   id: string;
+  user_id?: string; // ← Actual patrol user UUID (not yet in backend - uses unit.id as fallback)
   name: string;
   avatar: string;
   unit: string;
@@ -269,6 +270,7 @@ export interface IncidentPin {
   address: string;
   status: "pending" | "assigned" | "in_progress" | "resolved";
   assignedPatrol: string | null;
+  assigned_patrol_name?: string | null;
   timeReported: string;
 }
 
@@ -1168,6 +1170,7 @@ export function useApi<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const refetch = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1189,5 +1192,5 @@ export function useApi<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick, ...deps]);
 
-  return { data, loading, error, refetch: () => setTick((t) => t + 1) };
+  return { data, loading, error, refetch };
 }

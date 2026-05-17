@@ -8,6 +8,7 @@ import {
   Navigation,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useRealtime } from "../../context/RealtimeContext";
 import { useApi, fetchAssignedReports, fetchAvailableReports, fetchPatrolCase, acceptPatrolCase, startPatrolResponse, resolvePatrolCase, uploadToCloudinary, addPatrolComment } from "../../services/api";
 
 type CaseStatus = "pending" | "accepted" | "in_progress" | "submitted" | "resolving" | "resolved";
@@ -22,6 +23,7 @@ export function PatrolCaseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, session } = useAuth();
+  const { reportsVersion } = useRealtime();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -55,6 +57,18 @@ export function PatrolCaseDetail() {
   // Also fetch lists as fallback
   const { data: assignedReports, loading: assignedLoading, refetch: refetchAssigned } = useApi(fetchAssignedReports);
   const { data: availableReports, loading: availableLoading, refetch: refetchAvailable } = useApi(fetchAvailableReports);
+
+  useEffect(() => {
+    if (reportsVersion === 0) return;
+
+    const timeout = window.setTimeout(() => {
+      refetchCase();
+      refetchAssigned();
+      refetchAvailable();
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [refetchAssigned, refetchAvailable, refetchCase, reportsVersion]);
   
   // Prioritize specific case data, fall back to lists if not found
   const report = specificCase ?? [...(assignedReports ?? []), ...(availableReports ?? [])].find((r) => r.id === id);

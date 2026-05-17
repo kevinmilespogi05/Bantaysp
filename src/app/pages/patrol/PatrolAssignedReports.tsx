@@ -9,9 +9,10 @@
 import { useApi, fetchAdminAssignedReports, fetchAvailableReports, fetchSubmittedPatrolReports } from "../../services/api";
 import { PatrolEmptyState, PatrolSkeletonCard } from "../../components/ui/DataStates";
 import { useNavigate } from "react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
+import { useRealtime } from "../../context/RealtimeContext";
 import {
   MapPin, Clock, ChevronRight, Filter, Search,
   AlertTriangle, ArrowUpDown, Navigation, Zap, Check,
@@ -53,16 +54,29 @@ interface ReportCard {
 export function PatrolAssignedReports() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { connectionStatus, reportsVersion, onlineAdmins } = useRealtime();
   const [activeTab, setActiveTab] = useState<QueueTab>("assigned");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"distance" | "time">("distance");
 
   // Fetch all three queues
-  const { data: adminAssigned, loading: adminLoading } = useApi(() => 
+  const { data: adminAssigned, loading: adminLoading, refetch: refetchAdminAssigned } = useApi(() => 
     fetchAdminAssignedReports(user.id)
   );
-  const { data: availableReports, loading: availableLoading } = useApi(fetchAvailableReports);
-  const { data: submittedReports, loading: submittedLoading } = useApi(fetchSubmittedPatrolReports);
+  const { data: availableReports, loading: availableLoading, refetch: refetchAvailableReports } = useApi(fetchAvailableReports);
+  const { data: submittedReports, loading: submittedLoading, refetch: refetchSubmittedReports } = useApi(fetchSubmittedPatrolReports);
+
+  useEffect(() => {
+    if (reportsVersion === 0) return;
+
+    const timeout = window.setTimeout(() => {
+      refetchAdminAssigned();
+      refetchAvailableReports();
+      refetchSubmittedReports();
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [refetchAdminAssigned, refetchAvailableReports, refetchSubmittedReports, reportsVersion]);
 
   const currentQueue = activeTab === "assigned" 
     ? (adminAssigned ?? []) 
@@ -188,6 +202,12 @@ export function PatrolAssignedReports() {
             </p>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="px-2.5 py-1 rounded-full text-xs font-semibold border border-slate-700 text-slate-300 flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${connectionStatus === "connected" ? "bg-green-400" : connectionStatus === "offline" || connectionStatus === "error" ? "bg-red-400" : "bg-amber-400"}`} />
+              <span>{connectionStatus === "connected" ? "Live" : connectionStatus === "offline" ? "Offline" : "Syncing"}</span>
+              <span className="text-slate-600">|</span>
+              <span>{onlineAdmins.length} admin</span>
+            </div>
             <div className="px-2.5 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: "#800000" }}>
               {(adminAssigned?.length ?? 0) + (availableReports?.length ?? 0) + (submittedReports?.length ?? 0)} Total
             </div>

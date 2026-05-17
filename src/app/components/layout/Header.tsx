@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
 import { useSearch } from "../../context/SearchContext";
+import { useRealtime } from "../../context/RealtimeContext";
 
 // ─── Page title map ──────────────────────────────────────────────────────────
 
@@ -61,24 +62,31 @@ export function Header({ onMenuToggle }: HeaderProps) {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const { query, setQuery } = useSearch();
+  const {
+    connectionStatus,
+    notifications,
+    unreadCount,
+    onlineAdmins,
+    onlinePatrol,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useRealtime();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [notifs, setNotifs] = useState(INITIAL_NOTIFICATIONS);
 
   const pageName = pageNames[location.pathname] ?? "Bantay SP";
-  const unreadCount = notifs.filter((n) => !n.read).length;
   const rStyle = roleStyle[user.role];
+  const liveOnlineCount = user.role === "admin" ? onlinePatrol.length : user.role === "patrol" ? onlineAdmins.length : 0;
+  const liveStatusColor = connectionStatus === "connected" ? "bg-green-500" : connectionStatus === "offline" || connectionStatus === "error" ? "bg-red-500" : "bg-amber-500";
+  const liveStatusLabel = connectionStatus === "connected" ? "Live" : connectionStatus === "offline" ? "Offline" : "Syncing";
 
   const closeAll = () => {
     setShowNotifications(false);
     setShowProfile(false);
   };
-
-  const markAllRead = () =>
-    setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
 
   const notifIcon = (type: string) => {
     if (type === "success") return <CheckCircle className="w-4 h-4 text-green-500" />;
@@ -115,6 +123,15 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <span>{rStyle.emoji}</span>
         <span>{rStyle.label}</span>
       </div>
+
+      {(user.role === "admin" || user.role === "patrol") && (
+        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-gray-200 bg-white text-xs text-gray-600">
+          <span className={`w-2 h-2 rounded-full ${liveStatusColor}`} />
+          <span>{liveStatusLabel}</span>
+          <span className="text-gray-300">|</span>
+          <span>{liveOnlineCount} {user.role === "admin" ? "patrol" : "admins"} online</span>
+        </div>
+      )}
 
       {/* Desktop Search */}
       <div className="hidden md:flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 w-56 transition-all focus-within:border-[#800000] focus-within:ring-1 focus-within:ring-[#80000020]">
@@ -171,7 +188,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <span className="font-semibold text-gray-900 text-sm">Notifications</span>
                 <button
-                  onClick={markAllRead}
+                  onClick={markAllNotificationsRead}
                   className="text-xs hover:underline"
                   style={{ color: "#800000" }}
                 >
@@ -179,12 +196,19 @@ export function Header({ onMenuToggle }: HeaderProps) {
                 </button>
               </div>
               <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
-                {notifs.map((n) => (
+                {notifications.length === 0 && (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-sm text-gray-500">No live notifications yet</p>
+                    <p className="text-xs text-gray-400 mt-1">Updates will appear here automatically.</p>
+                  </div>
+                )}
+                {notifications.map((n) => (
                   <div
                     key={n.id}
+                    onClick={() => markNotificationRead(n.id)}
                     className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-gray-50 ${
                       !n.read ? "bg-red-50/30" : ""
-                    }`}
+                    } cursor-pointer`}
                   >
                     <div className="mt-0.5 shrink-0">{notifIcon(n.type)}</div>
                     <div className="flex-1 min-w-0">
