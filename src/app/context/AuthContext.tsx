@@ -220,6 +220,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // AbortController for cancelling in-flight enrichment requests
   const enrichmentAbortControllerRef = useRef<AbortController | null>(null);
+  const currentUserRef = useRef<AuthUser>(GUEST_USER);
+  const enrichedProfileUserIdRef = useRef<string | null>(null);
+  const enrichmentInFlightUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    currentUserRef.current = user;
+  }, [user]);
 
   // On mount: restore session (Supabase handles this automatically)
   useEffect(() => {
@@ -258,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isMounted) {
           enrichmentAbortControllerRef.current?.abort();
           enrichmentAbortControllerRef.current = new AbortController();
+          enrichmentInFlightUserIdRef.current = session.user.id;
           setIsEnriching(true);
 
           enrichUserWithDatabaseProfile(
@@ -275,22 +283,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role: enrichedUser.role,
               id: enrichedUser.id,
             });
+            enrichedProfileUserIdRef.current = enrichedUser.id;
+            currentUserRef.current = enrichedUser;
             setUser(enrichedUser);
+          }).finally(() => {
+            if (!isMounted) return;
+            enrichmentInFlightUserIdRef.current = null;
             setIsEnriching(false);
           });
         }
       } else {
         if (isMounted) {
           console.log("[AuthContext] No session, setting guest user");
+          enrichedProfileUserIdRef.current = null;
+          enrichmentInFlightUserIdRef.current = null;
+          currentUserRef.current = GUEST_USER;
           setUser(GUEST_USER);
           setIsLoading(false);
+          setIsEnriching(false);
         }
       }
     }).catch((err) => {
       console.error("[AuthContext] Error restoring session:", err);
       if (isMounted) {
+        enrichedProfileUserIdRef.current = null;
+        enrichmentInFlightUserIdRef.current = null;
+        currentUserRef.current = GUEST_USER;
         setUser(GUEST_USER);
         setIsLoading(false);
+        setIsEnriching(false);
       }
     });
 
@@ -310,6 +331,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
 
         if (session?.user) {
+          if (_event === "INITIAL_SESSION") {
+            console.log("[AuthContext] Ignoring INITIAL_SESSION; handled by getSession()");
+            return;
+          }
+
+          const currentUser = currentUserRef.current;
+          const isSameUser = currentUser.id === session.user.id;
+          const hasEnrichedProfile = enrichedProfileUserIdRef.current === session.user.id;
+          const enrichmentInFlight = enrichmentInFlightUserIdRef.current === session.user.id;
+          const isDuplicateSessionEvent = _event === "SIGNED_IN" || _event === "TOKEN_REFRESHED";
+
+          if (isDuplicateSessionEvent && isSameUser && (hasEnrichedProfile || enrichmentInFlight)) {
+            console.log("[AuthContext] Same user auth event received; preserving current profile:", {
+              event: _event,
+              userId: session.user.id,
+              hasEnrichedProfile,
+              enrichmentInFlight,
+            });
+            setIsLoading(false);
+            return;
+          }
+
           // Immediately set base user (non-blocking)
           const baseUser = mapSupabaseUser(session.user);
           if (isMounted) {
@@ -317,6 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role: baseUser.role,
               id: baseUser.id,
             });
+            currentUserRef.current = baseUser;
             setUser(baseUser);
             setIsLoading(false);
           }
@@ -325,6 +369,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (isMounted) {
             enrichmentAbortControllerRef.current?.abort();
             enrichmentAbortControllerRef.current = new AbortController();
+            enrichmentInFlightUserIdRef.current = session.user.id;
             setIsEnriching(true);
 
             enrichUserWithDatabaseProfile(
@@ -342,13 +387,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 role: enrichedUser.role,
                 id: enrichedUser.id,
               });
+              enrichedProfileUserIdRef.current = enrichedUser.id;
+              currentUserRef.current = enrichedUser;
               setUser(enrichedUser);
+            }).finally(() => {
+              if (!isMounted) return;
+              enrichmentInFlightUserIdRef.current = null;
               setIsEnriching(false);
             });
           }
         } else {
           if (isMounted) {
             console.log("[AuthContext] Auth change: no session, setting guest");
+            enrichedProfileUserIdRef.current = null;
+            enrichmentInFlightUserIdRef.current = null;
+            currentUserRef.current = GUEST_USER;
             setUser(GUEST_USER);
             setIsLoading(false);
             setIsEnriching(false);
@@ -425,6 +478,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (enrichedUser) {
       console.log("[AuthContext] Role refreshed:", { newRole: enrichedUser.role });
+      enrichedProfileUserIdRef.current = enrichedUser.id;
+      currentUserRef.current = enrichedUser;
       setUser(enrichedUser);
     }
 
@@ -476,4 +531,3 @@ export function useRoleNavigator() {
 
   return { navigateByRole, currentRole: user.role };
 }
-
