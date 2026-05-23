@@ -144,6 +144,9 @@ export function ReportsPage() {
     } else if (activeTab === "all") {
       // General community view: only show approved or resolved reports
       matchTab = r.status === "approved" || r.status === "resolved";
+    } else if (activeTab === "rejected") {
+      // Only the reporting user should see rejected reports
+      matchTab = r.status === "rejected" && isCurrentUserReport;
     } else {
       // Other tabs show only matching status
       matchTab = r.status === activeTab;
@@ -161,7 +164,7 @@ export function ReportsPage() {
     accepted:    (reports ?? []).filter((r) => r.status === "accepted").length,
     submitted:   (reports ?? []).filter((r) => r.status === "submitted").length,
     resolved:    (reports ?? []).filter((r) => r.status === "resolved").length,
-    rejected:    (reports ?? []).filter((r) => r.status === "rejected").length,
+    rejected:    (reports ?? []).filter((r) => r.status === "rejected" && r.user_id === user.id).length,
     my_pending_verification: (reports ?? []).filter((r) => r.status === "pending_verification" && r.user_id === user.id).length,
   };
 
@@ -474,6 +477,15 @@ export function ReportsPage() {
                       </span>
                     )}
                   </div>
+
+                  {selectedReport.status === "rejected" && (
+                    <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4">
+                      <h3 className="text-sm font-semibold text-red-900 mb-2">Rejection Reason</h3>
+                      <p className="text-sm text-red-800 leading-relaxed whitespace-pre-wrap">
+                        {selectedReport.rejection_reason || "No rejection reason provided by admin."}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-3 mb-5">
                     <div className="flex items-center gap-2 text-gray-600 text-sm">

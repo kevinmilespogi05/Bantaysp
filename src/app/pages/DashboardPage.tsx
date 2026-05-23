@@ -358,7 +358,7 @@ export function DashboardPage() {
                 {leaderboard.slice(0, 4).map((entry, index) => {
                   const rank = index + 1;
                   return (
-                    <div key={`lb-${rank}-${entry.id}-${index}`} className="flex items-center gap-3">
+                    <div key={`lb-${rank}-${entry.name}-${index}`} className="flex items-center gap-3">
                       <div
                         className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0"
                         style={{
@@ -373,7 +373,7 @@ export function DashboardPage() {
                         {entry.avatar}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900 text-sm truncate">{entry.first_name} {entry.last_name}</div>
+                        <div className="font-medium text-gray-900 text-sm truncate">{entry.name}</div>
                         <div className="text-gray-400" style={{ fontSize: "11px" }}>{entry.barangay}</div>
                       </div>
                       <div className="text-sm font-bold" style={{ color: "#800000" }}>{entry.points?.toLocaleString() || 0}</div>

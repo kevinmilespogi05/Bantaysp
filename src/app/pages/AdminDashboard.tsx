@@ -286,6 +286,7 @@ export function AdminDashboard() {
       if (result.data?.success) {
         showToast(`Report rejected with reason: "${rejectionReason}"`, "warning");
         await refetchPendingReports();
+        await refetchReports();
         await retryStats();
       } else {
         showToast(`Failed to reject report: ${result.error}`, "error");

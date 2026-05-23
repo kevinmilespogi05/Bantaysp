@@ -1007,6 +1007,19 @@ app.get("/reports", async (req, res) => {
 
     console.log(`[Reports] Fetching reports for user ${authValidation.userId?.substring(0, 8)}...`);
 
+    const { data: userProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", authValidation.userId)
+      .single();
+
+    if (profileError || !userProfile) {
+      console.error(`[Reports] Failed to fetch user role:`, profileError);
+      return res.status(500).json({ error: "Failed to fetch reports" });
+    }
+
+    const isAdminOrPatrol = ["admin", "patrol"].includes(userProfile.role);
+
     const { data: reports, error } = await supabase
       .from("reports")
       .select("id, title, category, status, location, timestamp, created_at, reporter, avatar, description, image_url, verified, comments, upvotes, is_anonymous, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, resolved_by, resolved_at, admin_notes, user_id, resolution_notes, resolution_evidence_url, patrol_assigned_to")
@@ -1041,7 +1054,14 @@ app.get("/reports", async (req, res) => {
       })
     );
 
-    res.json(processedReports || []);
+    const visibleReports = isAdminOrPatrol
+      ? processedReports
+      : (processedReports || []).filter((report) =>
+          report.user_id === authValidation.userId ||
+          ["approved", "resolved", "accepted", "submitted", "in_progress"].includes(report.status)
+        );
+
+    res.json(visibleReports || []);
   } catch (err) {
     console.error(`[Reports] Error:`, err);
     res.status(500).json({ error: "Failed to fetch reports" });
@@ -2988,7 +3008,7 @@ app.post("/admin/reports/:id/approve", async (req, res) => {
   }
 });
 
-/** POST /admin/reports/:id/reject - Reject a pending report (delete it) */
+/** POST /admin/reports/:id/reject - Reject a pending report */
 app.post("/admin/reports/:id/reject", async (req, res) => {
   try {
     const { id } = req.params;
@@ -3002,33 +3022,30 @@ app.post("/admin/reports/:id/reject", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    console.log(`[RejectReport] Admin ${adminUser.id} rejecting (deleting) report ${id}. Reason: ${reason}`);
+    console.log(`[RejectReport] Admin ${adminUser.id} rejecting report ${id}. Reason: ${reason}`);
 
-    // First, fetch the report to confirm it exists before deleting
-    const { data: reportToDelete, error: fetchError } = await supabase
+    const now = new Date().toISOString();
+    const { data: rejectedReport, error: updateError } = await supabase
       .from("reports")
-      .select("id, title, reporter")
+      .update({
+        status: "rejected",
+        rejected_by: adminUser.id,
+        rejected_at: now,
+        rejection_reason: reason,
+      })
       .eq("id", id)
-      .single();
+      .select();
 
-    if (fetchError || !reportToDelete) {
-      console.error("[RejectReport] Report not found:", fetchError);
-      return res.status(404).json({ error: "Report not found" });
-    }
-
-    // Delete the report
-    const { error: deleteError } = await supabase
-      .from("reports")
-      .delete()
-      .eq("id", id);
-
-    if (deleteError) {
-      console.error("[RejectReport] Error deleting report:", deleteError);
+    if (updateError || !rejectedReport || rejectedReport.length === 0) {
+      console.error("[RejectReport] Error rejecting report:", updateError);
       return res.status(500).json({ error: "Failed to reject report" });
     }
 
-    console.log(`[RejectReport] ✅ Report ${id} (${reportToDelete.title}) rejected and deleted`);
-    res.json({ success: true, message: "Report rejected and deleted", reportId: id, reason });
+    const updatedReport = rejectedReport[0];
+    await addSystemLog(id, "Report Rejected", `Admin rejected report. Reason: ${reason}`);
+
+    console.log(`[RejectReport] ✅ Report ${id} rejected`);
+    res.json({ success: true, message: "Report rejected successfully", report: updatedReport });
   } catch (err) {
     console.error("[RejectReport] Error:", err);
     res.status(500).json({ error: "Failed to reject report" });
