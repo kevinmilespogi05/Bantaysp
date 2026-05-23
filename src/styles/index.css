@@ -10,13 +10,13 @@
   100% { transform: scale(2.2); opacity: 0; }
 }
 
-/* Ensure Leaflet map tiles render above other elements */
-.leaflet-pane { z-index: 400 !important; }
-.leaflet-overlay-pane { z-index: 410 !important; }
-.leaflet-marker-pane { z-index: 420 !important; }
-.leaflet-tooltip-pane { z-index: 430 !important; }
-.leaflet-popup-pane { z-index: 440 !important; }
-.leaflet-top, .leaflet-bottom { z-index: 450 !important; }
+/* Keep Leaflet map panes below the app UI (sidebar z-40/z-50 = CSS 40/50) */
+.leaflet-pane { z-index: 1 !important; }
+.leaflet-overlay-pane { z-index: 2 !important; }
+.leaflet-marker-pane { z-index: 3 !important; }
+.leaflet-tooltip-pane { z-index: 4 !important; }
+.leaflet-popup-pane { z-index: 5 !important; }
+.leaflet-top, .leaflet-bottom { z-index: 6 !important; }
 
 /* Dark-themed Leaflet popups for Bantay SP */
 .bantay-popup .leaflet-popup-content-wrapper {
