@@ -195,7 +195,7 @@ export function LandingPage() {
           </div>
           <div className="hidden md:flex items-center gap-8">
             {["Features", "How It Works", "About"].map((item) => (
-              <a key={item} href={`#${item.toLowerCase().replace(" ", "-")}`} className="text-white/80 hover:text-white text-sm transition-colors">
+              <a key={item} href={`#${item.toLowerCase().replaceAll(" ", "-")}`} className="text-white/80 hover:text-white text-sm transition-colors">
                 {item}
               </a>
             ))}
