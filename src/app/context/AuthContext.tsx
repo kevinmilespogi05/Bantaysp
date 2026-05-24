@@ -439,13 +439,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<string | null> => {
     setIsLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    
-    // ✅ Login succeeded with Supabase Auth
-    // Now check if user is verified (exists in user_profiles)
+
+    // ❌ Supabase Auth rejected the credentials — user not registered or wrong password
+    if (error) {
+      setIsLoading(false);
+      const msg = error.message?.toLowerCase() ?? "";
+      if (
+        msg.includes("invalid login credentials") ||
+        msg.includes("invalid credentials") ||
+        msg.includes("user not found") ||
+        msg.includes("no user found")
+      ) {
+        return "No account found with this email address. Please register first or check your credentials.";
+      }
+      if (msg.includes("email not confirmed")) {
+        return "Your email address has not been confirmed yet. Please check your inbox.";
+      }
+      // Generic fallback for other auth errors
+      return "Incorrect email or password. Please try again.";
+    }
+
+    // ✅ Supabase Auth succeeded — now verify the session exists
     const session = await supabase.auth.getSession();
     if (!session.data.session?.user) {
       setIsLoading(false);
-      return "Login succeeded but no session was created";
+      return "No account found with this email address. Please register first or check your credentials.";
     }
 
     // Import the verification check
