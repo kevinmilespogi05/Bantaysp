@@ -2116,18 +2116,15 @@ app.get("/leaderboard", async (req, res) => {
 
     const { data: leaderboard, error } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, avatar, points, reports, barangay, role, joined")
+      .select("id, first_name, last_name, avatar, points, reports, barangay, role")
       .eq("role", "resident")
       .limit(50);
 
     if (error) throw error;
 
-    // Sort by points (descending), then by joined date (ascending) for consistent ranking
+    // Sort by points (descending)
     const sorted = (leaderboard || []).sort((a: any, b: any) => {
-      const pointsDiff = (b.points || 0) - (a.points || 0);
-      if (pointsDiff !== 0) return pointsDiff;
-      // If points are equal, sort by join date (earlier joins rank higher)
-      return new Date(a.joined).getTime() - new Date(b.joined).getTime();
+      return (b.points || 0) - (a.points || 0);
     });
 
     // Transform to LeaderboardEntry format with rank, combined name, and badge assignment
@@ -2199,7 +2196,7 @@ app.get("/profile/:userId", async (req, res) => {
       reports: userReports?.length || 0,
       badge: profile.badge || "Member",
       verified: profile.verified || false,
-      joined: profile.joined || new Date(profile.created_at).toISOString().split("T")[0],
+      joined: null,
       bio: profile.bio || "",
       email: profile.email,
       phone: profile.phone,
@@ -2402,7 +2399,7 @@ app.get("/verified-users", async (req, res) => {
     const { data: verifiedUsers, error } = await supabase
       .from("user_profiles")
       .select("*")
-      .order("joined", { ascending: false });
+      .order("id", { ascending: false });
 
     if (error) throw error;
 
@@ -2420,7 +2417,7 @@ app.get("/verified-users", async (req, res) => {
       verified: true,
       email: user.email,
       phone: user.phone,
-      joined: user.joined,
+      joined: null,
       bio: user.bio,
       achievements: [],
     }));
