@@ -72,6 +72,7 @@ interface PendingOtp {
   barangay: string;
   role: string;
   idPhotoUrl?: string;
+  dateOfBirth?: string;
 }
 
 // Store: { email → PendingOtp }
@@ -436,7 +437,7 @@ app.post("/register", async (req, res) => {
 app.post("/generate-otp", async (req, res) => {
   try {
     console.log("[GenerateOTP] Request received:", { email: req.body.email });
-    const { firstName, lastName, email, password, phone, barangay, role, idPhotoUrl } = req.body;
+    const { firstName, lastName, email, password, phone, barangay, role, idPhotoUrl, dateOfBirth } = req.body;
 
     // Validation
     if (!firstName || !lastName || !email || !password) {
@@ -477,6 +478,7 @@ app.post("/generate-otp", async (req, res) => {
         barangay,
         role: (role && ["resident", "admin", "patrol"].includes(role)) ? role : "resident",
         idPhotoUrl: idPhotoUrl || undefined,
+        dateOfBirth: dateOfBirth || undefined,
       });
       
       // Resend OTP email
@@ -521,6 +523,7 @@ app.post("/generate-otp", async (req, res) => {
       barangay,
       role: userRole,
       idPhotoUrl: idPhotoUrl || undefined,
+      dateOfBirth: dateOfBirth || undefined,
     });
 
     // Send OTP email
@@ -746,6 +749,7 @@ app.post("/verify-otp", async (req, res) => {
         avatar,
         id_document_url: idPhotoUrl || pendingOtp.idPhotoUrl || null,
         verification_status: "pending",
+        date_of_birth: pendingOtp.dateOfBirth || null,
       })
       .select()
       .single();
@@ -2184,7 +2188,117 @@ app.get("/profile/:userId", async (req, res) => {
       console.error(`[Profile] Error fetching report count:`, reportsError);
     }
 
+    // ─── Fetch full report list for achievements ───────────────────────────────
+    const { data: allUserReports, error: allReportsError } = await supabase
+      .from("reports")
+      .select("id, status")
+      .eq("user_id", userId);
+
+    if (allReportsError) {
+      console.error(`[Profile] Error fetching user reports for achievements:`, allReportsError);
+    }
+
+    const reportCount = (allUserReports || []).length;
+    const resolvedCount = (allUserReports || []).filter((r: any) => r.status === "resolved").length;
+    const points = profile.points || 0;
+    const isVerified = profile.verified || false;
+
+    // ─── Build dynamic achievements ───────────────────────────────────────────
+    const achievements = [
+      {
+        id: 1,
+        name: "First Responder",
+        description: "File your very first community report",
+        icon: "zap",
+        earned: reportCount >= 1,
+        progress: Math.min(reportCount, 1),
+        total: 1,
+      },
+      {
+        id: 2,
+        name: "Verified Citizen",
+        description: "Get your account verified by a barangay admin",
+        icon: "badge-check",
+        earned: isVerified,
+        progress: isVerified ? 1 : 0,
+        total: 1,
+      },
+      {
+        id: 3,
+        name: "Community Guardian",
+        description: "File 5 community reports to protect your barangay",
+        icon: "shield",
+        earned: reportCount >= 5,
+        progress: Math.min(reportCount, 5),
+        total: 5,
+      },
+      {
+        id: 4,
+        name: "Point Collector",
+        description: "Earn 100 civic points through active participation",
+        icon: "star",
+        earned: points >= 100,
+        progress: Math.min(points, 100),
+        total: 100,
+      },
+      {
+        id: 5,
+        name: "Safety Champion",
+        description: "File 10 reports — a true champion of public safety",
+        icon: "award",
+        earned: reportCount >= 10,
+        progress: Math.min(reportCount, 10),
+        total: 10,
+      },
+      {
+        id: 6,
+        name: "Problem Solver",
+        description: "Have 3 of your reports resolved by patrol officers",
+        icon: "check-circle",
+        earned: resolvedCount >= 3,
+        progress: Math.min(resolvedCount, 3),
+        total: 3,
+      },
+      {
+        id: 7,
+        name: "Silver Contributor",
+        description: "Accumulate 500 civic points for your contributions",
+        icon: "star",
+        earned: points >= 500,
+        progress: Math.min(points, 500),
+        total: 500,
+      },
+      {
+        id: 8,
+        name: "Top Reporter",
+        description: "File 25 reports — an elite community reporter",
+        icon: "trophy",
+        earned: reportCount >= 25,
+        progress: Math.min(reportCount, 25),
+        total: 25,
+      },
+      {
+        id: 9,
+        name: "Gold Achiever",
+        description: "Reach 1,000 civic points — the highest honor",
+        icon: "trophy",
+        earned: points >= 1000,
+        progress: Math.min(points, 1000),
+        total: 1000,
+      },
+    ];
+
     // Build response
+    const dateOfBirth: string | null = profile.date_of_birth || null;
+    let age: number | null = null;
+    if (dateOfBirth) {
+      const dob = new Date(dateOfBirth);
+      const today = new Date();
+      age = today.getFullYear() - dob.getFullYear();
+      const hasBirthdayPassedThisYear = today >= new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+      if (!hasBirthdayPassedThisYear) age -= 1;
+    }
+
     const userProfile = {
       id: profile.id,
       first_name: profile.first_name || "User",
@@ -2193,7 +2307,7 @@ app.get("/profile/:userId", async (req, res) => {
       barangay: profile.barangay || "Unknown",
       role: profile.role || "user",
       points: profile.points || 0,
-      reports: userReports?.length || 0,
+      reports: reportCount,
       badge: profile.badge || "Member",
       verified: profile.verified || false,
       joined: null,
@@ -2203,7 +2317,9 @@ app.get("/profile/:userId", async (req, res) => {
       email_verified: profile.email_verified || false,
       verification_status: profile.verification_status || "unverified",
       id_document_url: profile.id_document_url,
-      achievements: [],
+      date_of_birth: dateOfBirth,
+      age,
+      achievements,
     };
 
     res.json(userProfile);
@@ -2212,6 +2328,7 @@ app.get("/profile/:userId", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch user profile" });
   }
 });
+
 
 // ─── Update Profile ───────────────────────────────────────────────────────────
 
@@ -2380,6 +2497,7 @@ app.get("/users", async (req, res) => {
       phone: user.phone,
       joined: user.created_at,
       bio: "",
+      date_of_birth: user.date_of_birth || null,
       achievements: [],
     }));
 
@@ -2570,6 +2688,7 @@ app.post("/admin/approve-user/:userId", async (req, res) => {
         badge: "",
         points: 0,
         verified: true,
+        date_of_birth: pendingUser.date_of_birth || null,
       });
 
     if (insertError) {

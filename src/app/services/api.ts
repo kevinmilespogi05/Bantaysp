@@ -213,6 +213,7 @@ export interface Comment {
   avatar: string;
   text: string;
   time: string;
+  author_role?: string;
 }
 
 export interface Message {
@@ -390,12 +391,16 @@ export interface UserProfile {
   email_verified?: boolean;
   verification_status?: string;
   id_document_url?: string;
+  date_of_birth?: string | null;
+  age?: number | null;
   achievements: {
     id: number;
     name: string;
     description: string;
     icon: string;
     earned: boolean;
+    progress?: number;
+    total?: number;
   }[];
 }
 
@@ -996,6 +1001,7 @@ export interface RegisterData {
   phone: string;
   barangay: string;
   role?: "resident" | "admin" | "patrol";
+  dateOfBirth?: string;
 }
 
 export interface RegisterResponse {
@@ -1044,6 +1050,7 @@ export interface GenerateOtpData {
   barangay: string;
   role?: "resident" | "admin" | "patrol";
   idPhotoUrl?: string;
+  dateOfBirth?: string;
 }
 
 export interface GenerateOtpResponse {

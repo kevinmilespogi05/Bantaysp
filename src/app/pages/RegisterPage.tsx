@@ -1,10 +1,10 @@
 import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin, AlertCircle, Loader, FileText } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin, AlertCircle, Loader, FileText, Calendar } from "lucide-react";
 import { BantayLogo } from "../components/ui/BantayLogo";
 import { VerificationNotification } from "../components/ui/VerificationNotification";
-import { registerUser, verifyOtp, generateOtp, uploadToCloudinary } from "../services/api";
+import { registerUser, verifyOtp, generateOtp, resendOtp, uploadToCloudinary } from "../services/api";
 
 const steps = [
   { id: 1, label: "Personal Info", icon: User },
@@ -41,6 +41,7 @@ export function RegisterPage() {
     barangay: "Brgy. San Pablo",
     password: "",
     confirmPassword: "",
+    dateOfBirth: "",
   });
 
   const barangays = [
@@ -65,6 +66,23 @@ export function RegisterPage() {
       // Frontend validation
       if (!form.firstName || !form.lastName || !form.email || !form.password || !form.confirmPassword || !form.barangay) {
         setError("Please fill in all required fields");
+        return;
+      }
+
+      // Validate date of birth
+      if (!form.dateOfBirth) {
+        setError("Please enter your date of birth");
+        return;
+      }
+      const dobDate = new Date(form.dateOfBirth);
+      const today = new Date();
+      if (isNaN(dobDate.getTime()) || dobDate >= today) {
+        setError("Please enter a valid date of birth");
+        return;
+      }
+      const ageYears = today.getFullYear() - dobDate.getFullYear() - (today < new Date(today.getFullYear(), dobDate.getMonth(), dobDate.getDate()) ? 1 : 0);
+      if (ageYears < 13) {
+        setError("You must be at least 13 years old to register");
         return;
       }
       
@@ -105,6 +123,7 @@ export function RegisterPage() {
         phone: form.phone,
         barangay: form.barangay,
         role: "resident",
+        dateOfBirth: form.dateOfBirth,
       });
 
       if (apiError) {
@@ -138,6 +157,7 @@ export function RegisterPage() {
         barangay: form.barangay,
         role: "resident",
         idPhotoUrl: idPhotoUrl,
+        dateOfBirth: form.dateOfBirth,
       });
       setLoading(false);
       
@@ -456,6 +476,22 @@ export function RegisterPage() {
                         <option value="">Select your barangay</option>
                         {barangays.map((b) => <option key={b} value={b}>{b}</option>)}
                       </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={form.dateOfBirth}
+                        onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })}
+                        max={new Date(new Date().setFullYear(new Date().getFullYear() - 13)).toISOString().split("T")[0]}
+                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 outline-none bg-white"
+                        onFocus={(e) => (e.target.style.borderColor = "#800000")}
+                        onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                      />
                     </div>
                   </div>
 

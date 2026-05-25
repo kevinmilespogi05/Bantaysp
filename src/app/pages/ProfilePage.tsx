@@ -5,20 +5,33 @@ import {
   User, Settings, Trophy, CheckCircle, Shield, Star, Zap, Award,
   MapPin, Mail, Phone, Calendar, Edit3, BadgeCheck,
   FileText, Lock, Bell, Eye, ThumbsUp, X, Image, MessageSquare,
-  Clock, Send, AlertCircle, ChevronDown,
+  Clock, Send, AlertCircle, ChevronDown, Sparkles, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useApi, fetchUserProfile, updateProfile, fetchUserReports, fetchComments, fetchUserUpvotes, upvoteReport, addComment, updateReportStatus, type Report, type Comment } from "../services/api";
 import { PageSpinner, EmptyState } from "../components/ui/DataStates";
 import { ImageViewerModal } from "../components/ui/ImageViewerModal";
 
-const achievementIcons: Record<string, LucideIcon> = {
+const achievementIcons: Record<string, any> = {
   zap: Zap,
   shield: Shield,
   award: Award,
   star: Star,
   "badge-check": BadgeCheck,
+  "check-circle": CheckCircle,
   trophy: Trophy,
+};
+
+const achievementPoints: Record<number, number> = {
+  1: 50,  // First Responder
+  2: 100, // Verified Citizen
+  3: 150, // Community Guardian
+  4: 100, // Point Collector
+  5: 250, // Safety Champion
+  6: 200, // Problem Solver
+  7: 300, // Silver Contributor
+  8: 500, // Top Reporter
+  9: 500, // Gold Achiever
 };
 
 type TabKey = "overview" | "reports" | "achievements" | "settings";
@@ -50,6 +63,59 @@ export function ProfilePage() {
   const [notifications, setNotifications] = useState({
     email: true, push: true, sms: false, announcements: true, reportUpdates: true,
   });
+
+  const [unlockedToast, setUnlockedToast] = useState<{ name: string; desc: string; icon: string; pts: number } | null>(null);
+  const [achievementFilter, setAchievementFilter] = useState<"all" | "completed" | "in_progress" | "locked">("all");
+
+  React.useEffect(() => {
+    if (unlockedToast) {
+      const timer = setTimeout(() => {
+        setUnlockedToast(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [unlockedToast]);
+
+  const getMockRarity = (id: number): { percent: number; isRare: boolean } => {
+    const rarities: Record<number, number> = {
+      1: 45.8, // First Responder
+      2: 24.3, // Verified Citizen
+      3: 12.5, // Community Guardian (Rare)
+      4: 32.1, // Point Collector
+      5: 8.4,  // Safety Champion (Rare)
+      6: 15.6, // Problem Solver
+      7: 5.2,  // Silver Contributor (Rare)
+      8: 2.1,  // Top Reporter (Ultra Rare)
+      9: 0.8,  // Gold Achiever (Ultra Rare)
+    };
+    const val = rarities[id] || 15.0;
+    return { percent: val, isRare: val < 15.0 };
+  };
+
+  const getMockCompletionDate = (id: number): string => {
+    const dates: Record<number, string> = {
+      1: "Aug 12, 2025 at 2:15 PM",
+      2: "Sep 05, 2025 at 9:30 AM",
+      3: "Oct 18, 2025 at 4:45 PM",
+      4: "Nov 01, 2025 at 11:20 AM",
+      5: "Jan 14, 2026 at 3:10 PM",
+      6: "Feb 28, 2026 at 6:15 PM",
+      7: "Apr 02, 2026 at 8:05 AM",
+      8: "May 10, 2026 at 9:50 PM",
+      9: "May 24, 2026 at 11:32 AM",
+    };
+    return dates[id] || "May 25, 2026 at 12:00 PM";
+  };
+
+  const handleCardClick = (ach: any, status: "completed" | "in_progress" | "locked", pts: number) => {
+    if (status === "completed") {
+      setUnlockedToast({ name: ach.name, desc: ach.description, icon: ach.icon, pts });
+    } else if (status === "in_progress") {
+      setUnlockedToast({ name: ach.name, desc: `Keep going! Complete requirements to unlock.`, icon: ach.icon, pts });
+    } else {
+      setUnlockedToast({ name: ach.name, desc: `Locked! Start this task to unlock rewards.`, icon: ach.icon, pts });
+    }
+  };
 
   // Report modal state
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
@@ -126,6 +192,8 @@ export function ProfilePage() {
     bio: profileData?.bio ?? "",
     phone: profileData?.phone ?? "",
     achievements: profileData?.achievements ?? [],
+    dateOfBirth: profileData?.date_of_birth ?? null,
+    age: profileData?.age ?? null,
   };
 
   // Initialize edit form when user starts editing
@@ -199,7 +267,9 @@ export function ProfilePage() {
     setUpdatingStatus(true);
     setUpdateError(null);
 
-    const updateData = isVerification ? { verified: newStatus } : { status: newStatus };
+    const updateData = isVerification
+      ? { verified: newStatus as boolean }
+      : { status: newStatus as "rejected" | "in_progress" | "resolved" | "accepted" | "pending" };
 
     const { data, error } = await updateReportStatus(selectedReport.id, updateData);
 
@@ -393,10 +463,20 @@ export function ProfilePage() {
                     <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
                     {displayUser.barangay}, Castillejos, Zambales
                   </div>
-                  <div className="flex items-center gap-3 text-gray-600 text-sm">
-                    <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                    Member since {displayUser.joined}
-                  </div>
+                  {displayUser.dateOfBirth && (
+                    <div className="flex items-center gap-3 text-gray-600 text-sm">
+                      <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+                      <span>
+                        {new Date(displayUser.dateOfBirth).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}
+                        {displayUser.age !== null && (
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: "#80000015", color: "#800000" }}>
+                            {displayUser.age} yrs old
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="p-3 bg-gray-50 rounded-xl">
                     <p className="text-gray-600 text-sm leading-relaxed">{displayUser.bio || "No bio added yet"}</p>
                   </div>
@@ -564,61 +644,377 @@ export function ProfilePage() {
         )}
 
         {/* Achievements Tab */}
-        {activeTab === "achievements" && (
-          <motion.div
-            key="achievements"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-          >
-            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {displayUser.achievements.map((ach, i) => {
-                const Icon = achievementIcons[ach.icon] || Star;
-                return (
+        {activeTab === "achievements" && (() => {
+          const achievements = displayUser.achievements || [];
+          const totalCount = achievements.length;
+          const completedAchievements = achievements.filter((a) => a.earned);
+          const completedCount = completedAchievements.length;
+          const inProgressAchievements = achievements.filter((a) => !a.earned && (a.progress ?? 0) > 0);
+          const lockedAchievements = achievements.filter((a) => !a.earned && (a.progress ?? 0) === 0);
+          
+          const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+          
+          // Calculate achievement points
+          const achievementPointsEarned = completedAchievements.reduce((sum, a) => sum + (achievementPoints[a.id] || 0), 0);
+          const totalPossiblePoints = achievements.reduce((sum, a) => sum + (achievementPoints[a.id] || 0), 0);
+          
+          // Sort logic: Completed first, then In Progress, then Locked
+          const getStatusScore = (ach: any) => {
+            if (ach.earned) return 2;
+            if ((ach.progress ?? 0) > 0) return 1;
+            return 0;
+          };
+
+          const sortedAchievements = [...achievements].sort((a, b) => {
+            const scoreA = getStatusScore(a);
+            const scoreB = getStatusScore(b);
+            if (scoreA !== scoreB) {
+              return scoreB - scoreA; // Descending: 2, then 1, then 0
+            }
+            return a.id - b.id; // Secondary sorting by ID
+          });
+
+          // Filter logic based on UI filter state
+          const filteredAchievements = sortedAchievements.filter((ach) => {
+            if (achievementFilter === "all") return true;
+            if (achievementFilter === "completed") return ach.earned;
+            if (achievementFilter === "in_progress") return !ach.earned && (ach.progress ?? 0) > 0;
+            if (achievementFilter === "locked") return !ach.earned && (ach.progress ?? 0) === 0;
+            return true;
+          });
+
+          const renderAchievementCard = (ach: any, idx: number) => {
+            const Icon = achievementIcons[ach.icon] || Star;
+            const pts = achievementPoints[ach.id] || 50;
+            const progressVal = ach.progress ?? 0;
+            const totalVal = ach.total ?? 1;
+            const progressPct = Math.min((progressVal / totalVal) * 100, 100);
+            
+            const isCompleted = ach.earned;
+            const isInProgress = !ach.earned && progressVal > 0;
+            const isLocked = !ach.earned && progressVal === 0;
+            
+            const { percent: rarityPct, isRare } = getMockRarity(ach.id);
+            const completionDate = getMockCompletionDate(ach.id);
+
+            let status: "completed" | "in_progress" | "locked" = "locked";
+            if (isCompleted) status = "completed";
+            else if (isInProgress) status = "in_progress";
+
+            // Styling based on status
+            let cardClasses = "";
+            let iconContainerClasses = "";
+            let iconClasses = "";
+            let progressBarColor = "";
+            let progressTrackColor = "bg-slate-950";
+            let rarityClasses = "";
+            let rewardTagClasses = "";
+
+            if (isCompleted) {
+              if (isRare) {
+                cardClasses = "bg-gradient-to-br from-[#1b150c]/90 to-[#121216]/95 border-amber-500/40 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.06)] hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]";
+                iconContainerClasses = "border-amber-400 bg-gradient-to-br from-[#30200c] to-[#121216] text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse";
+                iconClasses = "text-amber-400 drop-shadow-[0_2px_6px_rgba(245,158,11,0.4)]";
+                progressBarColor = "bg-gradient-to-r from-amber-500 to-yellow-400";
+                rarityClasses = "text-amber-400 font-bold flex items-center gap-1";
+                rewardTagClasses = "bg-amber-400/20 text-amber-400 border border-amber-400/30";
+              } else {
+                cardClasses = "bg-gradient-to-br from-[#0c1b12]/90 to-[#121216]/95 border-emerald-500/40 hover:border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.06)] hover:shadow-[0_0_20px_rgba(16,185,129,0.15)]";
+                iconContainerClasses = "border-emerald-400 bg-gradient-to-br from-[#0c301b] to-[#121216] text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]";
+                iconClasses = "text-emerald-400 drop-shadow-[0_2px_6px_rgba(16,185,129,0.4)]";
+                progressBarColor = "bg-gradient-to-r from-emerald-500 to-teal-400";
+                rarityClasses = "text-gray-400 font-semibold";
+                rewardTagClasses = "bg-emerald-400/20 text-emerald-400 border border-emerald-400/30";
+              }
+            } else if (isInProgress) {
+              cardClasses = "bg-gradient-to-br from-[#1c0c0c]/90 to-[#121216]/95 border-red-700/40 hover:border-red-500 shadow-md hover:shadow-[0_0_15px_rgba(128,0,0,0.15)]";
+              iconContainerClasses = "border-red-500 bg-gradient-to-br from-[#3a0d0d] to-[#121216] text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.2)]";
+              iconClasses = "text-red-400";
+              progressBarColor = "bg-gradient-to-r from-red-600 to-rose-500 animate-pulse";
+              rarityClasses = "text-gray-500";
+              rewardTagClasses = "bg-red-400/10 text-red-400 border border-red-400/20";
+            } else {
+              // locked
+              cardClasses = "bg-gradient-to-br from-[#1b0a0a]/50 to-[#120505]/60 border-red-950/40 opacity-55 hover:opacity-75 transition-opacity";
+              iconContainerClasses = "border-red-950/50 bg-red-950/20 text-red-900/60";
+              iconClasses = "text-red-900/50 filter blur-[0.3px]";
+              progressBarColor = "bg-red-950";
+              rarityClasses = "text-gray-600";
+              rewardTagClasses = "bg-red-950/30 text-red-400 border border-red-950/40";
+            }
+
+            // Map custom unit label for counter
+            let unitLabel = "Reports";
+            if (ach.id === 2) {
+              unitLabel = "Verified";
+            } else if (ach.id === 4 || ach.id === 7 || ach.id === 9) {
+              unitLabel = "Points";
+            } else if (ach.id === 6) {
+              unitLabel = "Resolved";
+            }
+
+            return (
+              <motion.div
+                key={ach.id}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                whileHover={{ y: -3, scale: 1.01 }}
+                onClick={() => handleCardClick(ach, status, pts)}
+                className={`rounded-xl p-4 sm:p-5 border transition-all flex flex-col justify-between cursor-pointer select-none text-white relative group overflow-hidden ${cardClasses}`}
+              >
+                {/* Horizontal Layout block */}
+                <div className="flex gap-4 items-start">
+                  {/* Badge Frame */}
+                  <div className={`w-16 h-16 sm:w-20 sm:h-20 border-2 rounded-xl flex items-center justify-center shrink-0 shadow-inner transition-transform group-hover:scale-105 ${iconContainerClasses}`}>
+                    <Icon className={`w-8 h-8 sm:w-10 sm:h-10 ${iconClasses}`} />
+                  </div>
+                  
+                  {/* Content Right */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+                      <h5 className={`font-bold text-sm sm:text-base tracking-tight ${isLocked ? "text-gray-400 font-medium" : "text-white"}`}>
+                        {ach.name}
+                      </h5>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 tracking-wide uppercase ${rewardTagClasses}`}>
+                        +{pts} XP
+                      </span>
+                    </div>
+                    <p className="text-gray-400 text-xs mt-1 leading-normal line-clamp-2">{ach.description}</p>
+                  </div>
+                </div>
+
+                {/* Progress bar and details underneath (Steam Layout) */}
+                <div className="mt-4 pt-3 border-t border-slate-800/60 flex flex-col gap-2">
+                  {/* Progress Slider */}
+                  <div>
+                    <div className="flex justify-between items-center text-[10px] mb-1">
+                      <span className={isCompleted ? "text-emerald-400 font-semibold" : isInProgress ? "text-red-400 font-semibold" : "text-gray-500 font-medium"}>
+                        {ach.id === 2 ? (progressVal === 1 ? "Account Verified" : "Verification Pending") : `${progressVal.toLocaleString()} / ${totalVal.toLocaleString()} ${unitLabel}`}
+                      </span>
+                      <span className={`font-semibold ${isCompleted ? "text-emerald-400" : isInProgress ? "text-red-400" : "text-gray-500"}`}>
+                        {Math.round(progressPct)}%
+                      </span>
+                    </div>
+                    <div className={`h-1.5 rounded-full overflow-hidden border border-slate-900/50 ${progressTrackColor}`}>
+                      <motion.div
+                        className={`h-full rounded-full ${progressBarColor}`}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progressPct}%` }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Date & Rarity */}
+                  <div className="flex justify-between items-center text-[9px] sm:text-[10px] text-gray-500 pt-1">
+                    <div className="flex items-center gap-1 truncate max-w-[65%]">
+                      {isCompleted ? (
+                        <>
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="truncate">Unlocked on {completionDate}</span>
+                        </>
+                      ) : isInProgress ? (
+                        <>
+                          <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <span>In Progress...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                          <span>Locked</span>
+                        </>
+                      )}
+                    </div>
+                    <div className={`shrink-0 ${rarityClasses}`}>
+                      {isRare && <Sparkles className="w-3 h-3 text-amber-400 inline shrink-0 mr-0.5" />}
+                      {rarityPct}% residents unlocked
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          };
+
+          return (
+            <motion.div
+              key="achievements"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="space-y-6"
+            >
+              {/* Overall Achievement Summary Banner (Charcoal Gradient with red highlights) */}
+              <div 
+                className="relative rounded-3xl p-6 sm:p-8 shadow-2xl border border-red-950 overflow-hidden text-white flex flex-col md:flex-row md:items-center justify-between gap-6"
+                style={{ background: "linear-gradient(135deg, #121216, #201010)" }}
+              >
+                {/* Glowing red accent lights */}
+                <div className="absolute -right-16 -bottom-16 w-64 h-64 rounded-full bg-red-900/10 blur-3xl pointer-events-none" />
+                <div className="absolute -left-16 -top-16 w-48 h-48 rounded-full bg-red-900/10 blur-2xl pointer-events-none" />
+
+                <div className="flex items-center gap-5 z-10">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#800000] to-red-950 border border-red-900/50 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(128,0,0,0.3)]">
+                    <Trophy className="w-9 h-9 text-amber-400 drop-shadow-[0_2px_8px_rgba(251,191,36,0.5)] animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">Achievements Gallery</h3>
+                    <p className="text-gray-400 text-xs sm:text-sm mt-1 max-w-md leading-relaxed">
+                      Complete community safety targets to collect reward points, level up your civic rank, and safeguard Barangay San Pablo.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Circular completion tracker */}
+                <div className="flex items-center gap-6 z-10 shrink-0 border-t border-slate-800/60 md:border-t-0 pt-4 md:pt-0">
+                  <div className="text-left md:text-right">
+                    <div className="text-xs text-red-400 font-semibold uppercase tracking-wider">Completion Status</div>
+                    <div className="text-3xl font-black tracking-tight mt-1">{completionPercentage}%</div>
+                    <div className="text-xs text-gray-400 mt-1">{completedCount} of {totalCount} Completed</div>
+                  </div>
+                  <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle 
+                        cx="32" 
+                        cy="32" 
+                        r="26" 
+                        className="text-slate-800" 
+                        strokeWidth="5" 
+                        stroke="currentColor" 
+                        fill="transparent" 
+                      />
+                      <circle 
+                        cx="32" 
+                        cy="32" 
+                        r="26" 
+                        className="text-[#800000] transition-all duration-1000 ease-out" 
+                        strokeWidth="5" 
+                        strokeDasharray={2 * Math.PI * 26}
+                        strokeDashoffset={2 * Math.PI * 26 * (1 - completionPercentage / 100)}
+                        strokeLinecap="round"
+                        stroke="currentColor" 
+                        fill="transparent" 
+                        style={{ filter: "drop-shadow(0 0 4px rgba(128,0,0,0.5))" }}
+                      />
+                    </svg>
+                    <span className="absolute text-xs font-bold text-red-400">{completedCount}/{totalCount}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Master Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-[#230909]/95 to-[#160505]/95 backdrop-blur-md border border-red-900/40 rounded-2xl p-5 shadow-lg flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs font-medium">Unlocked XP</div>
+                    <div className="text-lg font-bold text-white mt-0.5">{achievementPointsEarned} <span className="text-gray-500 text-xs">/ {totalPossiblePoints} XP</span></div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-[#230909]/95 to-[#160505]/95 backdrop-blur-md border border-red-900/40 rounded-2xl p-5 shadow-lg flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                    <Star className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs font-medium">Total Civic Points</div>
+                    <div className="text-lg font-bold text-white mt-0.5">{displayUser.points.toLocaleString()} XP</div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-[#230909]/95 to-[#160505]/95 backdrop-blur-md border border-red-900/40 rounded-2xl p-5 shadow-lg flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                    <Trophy className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs font-medium">Current Civic Rank</div>
+                    <div className="text-lg font-bold text-white mt-0.5">#2 <span className="text-gray-500 text-xs">overall</span></div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-[#230909]/95 to-[#160505]/95 backdrop-blur-md border border-red-900/40 rounded-2xl p-5 shadow-lg flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                    <Award className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs font-medium">Civic Tier Status</div>
+                    <div className="text-lg font-bold text-white mt-0.5">{displayUser.badge} <span className="text-gray-500 text-xs">Reporter</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Master Dashboard Progress bar */}
+              <div className="bg-gradient-to-br from-[#230909]/95 to-[#160505]/95 backdrop-blur-md border border-red-900/40 rounded-2xl p-5 shadow-lg space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-400 font-medium">Master Gallery Progress</span>
+                  <span className="text-red-400 font-bold">{completionPercentage}% Completed</span>
+                </div>
+                <div className="h-3 bg-black/60 rounded-full overflow-hidden border border-red-950/30">
                   <motion.div
-                    key={ach.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.07 }}
-                    className={`rounded-2xl p-5 shadow-sm border transition-all ${
-                      ach.earned
-                        ? "bg-white border-gray-100 hover:shadow-md"
-                        : "bg-gray-50 border-gray-100 opacity-60"
+                    className="h-full bg-gradient-to-r from-[#800000] to-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${completionPercentage}%` }}
+                    transition={{ duration: 1, ease: "easeOut" }}
+                  />
+                </div>
+              </div>
+
+              {/* Filter Tabs for achievements */}
+              <div className="flex items-center gap-2 border-b border-red-900/20 pb-3 overflow-x-auto">
+                {[
+                  { key: "all", label: "All Achievements", count: totalCount },
+                  { key: "completed", label: "Unlocked", count: completedCount },
+                  { key: "in_progress", label: "In Progress", count: inProgressAchievements.length },
+                  { key: "locked", label: "Locked", count: lockedAchievements.length },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => setAchievementFilter(item.key as any)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 ${
+                      achievementFilter === item.key
+                        ? "bg-[#800000] text-white shadow-md shadow-red-950/40"
+                        : "bg-[#1e0707]/80 text-gray-400 hover:text-white border border-red-950/80 hover:border-red-900/50 hover:bg-[#280a0a]/80"
                     }`}
                   >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-                        style={{
-                          backgroundColor: ach.earned ? "#80000015" : "#e5e7eb",
-                        }}
-                      >
-                        <Icon
-                          className="w-7 h-7"
-                          style={{ color: ach.earned ? "#800000" : "#9ca3af" }}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <h3 className="font-semibold text-gray-900 text-sm">{ach.name}</h3>
-                          {ach.earned && <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />}
-                        </div>
-                        <p className="text-gray-500 text-xs">{ach.description}</p>
-                        <div className="mt-1.5">
-                          {ach.earned ? (
-                            <span className="text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Earned</span>
-                          ) : (
-                            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Not yet earned</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
+                    {item.label}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                      achievementFilter === item.key
+                        ? "bg-white/20 text-white"
+                        : "bg-red-950/85 text-red-300"
+                    }`}>
+                      {item.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Consolidated 2-column Grid of achievement cards */}
+              <div className="bg-gradient-to-b from-[#2d0a0a]/90 to-[#150404]/95 backdrop-blur-md border border-red-900/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-red-300/80 uppercase tracking-widest font-semibold">
+                    Displaying {filteredAchievements.length} achievements (sorted by completion)
+                  </span>
+                  {completedCount > 0 && achievementFilter === "all" && (
+                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                      ✓ Completed achievements moved to top
+                    </span>
+                  )}
+                </div>
+                {filteredAchievements.length === 0 ? (
+                  <div className="bg-[#1e0707]/30 border border-dashed border-red-900/40 rounded-2xl p-10 text-center text-gray-500 text-sm">
+                    No achievements match the selected filter.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {filteredAchievements.map((ach, idx) => renderAchievementCard(ach, idx))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* Settings Tab */}
         {activeTab === "settings" && (
@@ -1009,13 +1405,43 @@ export function ProfilePage() {
       </AnimatePresence>
 
       {/* Image Viewer Modal */}
-      {showImageViewer && selectedReport?.image_url && (
+      {selectedReport && (
         <ImageViewerModal
-          images={selectedReport.image_urls || [selectedReport.image_url]}
-          initialIndex={0}
+          isOpen={showImageViewer}
+          imageUrl={selectedReport.image_url}
+          imageUrls={selectedReport.image_urls}
+          title={selectedReport.title}
           onClose={() => setShowImageViewer(false)}
         />
       )}
+
+      {/* Xbox/PlayStation Style Achievement Unlocked Toast */}
+      <AnimatePresence>
+        {unlockedToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 70, scale: 0.8 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.8 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            onClick={() => setUnlockedToast(null)}
+            className="fixed bottom-6 right-6 z-[9999] bg-[#121216] border-2 border-amber-500/80 text-white rounded-2xl p-4 shadow-[0_10px_40px_rgba(0,0,0,0.6)] flex items-center gap-4 max-w-sm cursor-pointer select-none border-double"
+            style={{ boxShadow: "0 0 25px rgba(245,158,11,0.2)" }}
+          >
+            {/* Glowing trophy circle */}
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border-2 border-amber-400 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+              <Trophy className="w-6 h-6 text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] text-amber-400 font-bold uppercase tracking-widest">Achievement Unlocked!</div>
+              <div className="font-extrabold text-sm mt-0.5 text-white truncate">{unlockedToast.name}</div>
+              <div className="text-gray-400 text-[11px] mt-0.5 line-clamp-1">{unlockedToast.desc}</div>
+              <div className="text-[10px] font-bold text-emerald-400 mt-1 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" /> +{unlockedToast.pts} XP Earned
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
