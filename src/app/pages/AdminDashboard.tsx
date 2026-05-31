@@ -101,6 +101,19 @@ export function AdminDashboard() {
   const [selectedSubmittedReport, setSelectedSubmittedReport] = useState<any>(null);
   const [submittedResolutionNotes, setSubmittedResolutionNotes] = useState("");
   const [processingSubmittedId, setProcessingSubmittedId] = useState<string | null>(null);
+
+  // User rejection reason modal state
+  const [showUserRejectModal, setShowUserRejectModal] = useState(false);
+  const [pendingRejectUser, setPendingRejectUser] = useState<{ id: string; name: string } | null>(null);
+  const [userRejectionReason, setUserRejectionReason] = useState("");
+  const [userRejectionCustom, setUserRejectionCustom] = useState(false);
+
+  const USER_REJECTION_PRESETS = [
+    "Invalid or unverifiable ID submitted.",
+    "The applicant is not a resident of Barangay San Pablo.",
+    "The submitted ID document is expired or not government-issued.",
+    "Incomplete or inconsistent registration information provided.",
+  ];
   
   // Confirm dialog state
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -229,8 +242,11 @@ export function AdminDashboard() {
   };
 
   const handleRejectUser = async (userId: string, userName: string) => {
-    setConfirmAction({ type: "reject", userId, userName });
-    setConfirmOpen(true);
+    // Open rejection reason modal instead of direct confirm dialog
+    setPendingRejectUser({ id: userId, name: userName });
+    setUserRejectionReason("");
+    setUserRejectionCustom(false);
+    setShowUserRejectModal(true);
   };
 
   const confirmRejectUser = async () => {
@@ -251,6 +267,31 @@ export function AdminDashboard() {
       setProcessingUserId(null);
       setConfirmOpen(false);
       setConfirmAction(null);
+    }
+  };
+
+  const confirmRejectUserWithReason = async () => {
+    if (!pendingRejectUser) return;
+    const reason = userRejectionReason.trim();
+    if (!reason) return;
+    setProcessingUserId(pendingRejectUser.id);
+    try {
+      const result = await rejectUser(pendingRejectUser.id, reason);
+      if (result.data?.success) {
+        showToast(`${pendingRejectUser.name}'s application rejected`, "warning");
+        await refetchPendingUsers();
+        await retryStats();
+      } else {
+        showToast(`Failed to reject user: ${result.error}`, "error");
+      }
+    } catch (err) {
+      showToast(`Error: ${err instanceof Error ? err.message : "Failed to reject user"}`, "error");
+    } finally {
+      setProcessingUserId(null);
+      setShowUserRejectModal(false);
+      setPendingRejectUser(null);
+      setUserRejectionReason("");
+      setUserRejectionCustom(false);
     }
   };
 
@@ -399,8 +440,6 @@ export function AdminDashboard() {
     if (!confirmAction) return;
     if (confirmAction.type === "approve") {
       confirmApproveUser();
-    } else if (confirmAction.type === "reject") {
-      confirmRejectUser();
     } else if (confirmAction.type === "delete-report") {
       confirmDeleteReport();
     }
@@ -1452,6 +1491,136 @@ export function AdminDashboard() {
               description="User ID verification requests will appear here"
             />
           )}
+        </div>
+      )}
+
+      {/* ── User Rejection Reason Modal ── */}
+      {showUserRejectModal && pendingRejectUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden"
+          >
+            {/* Header */}
+            <div className="h-1" style={{ background: "linear-gradient(90deg, #800000, #c53030)" }} />
+            <div className="px-6 py-5 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: "linear-gradient(135deg, #800000, #c53030)" }}
+                >
+                  <X className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900">Reject Registration</h3>
+                  <p className="text-gray-400 text-xs">{pendingRejectUser.name}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-gray-600 text-sm">
+                Please provide a reason for rejecting this registration. The applicant will see this message when they try to log in.
+              </p>
+
+              {/* Quick-select presets */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Quick Select</p>
+                {USER_REJECTION_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setUserRejectionReason(preset);
+                      setUserRejectionCustom(false);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-sm border transition-all ${
+                      userRejectionReason === preset && !userRejectionCustom
+                        ? "border-red-300 bg-red-50 text-red-800 font-medium"
+                        : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+
+                {/* Custom reason toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserRejectionCustom(true);
+                    setUserRejectionReason("");
+                  }}
+                  className={`w-full text-left px-4 py-2.5 rounded-xl text-sm border transition-all ${
+                    userRejectionCustom
+                      ? "border-red-300 bg-red-50 text-red-800 font-medium"
+                      : "border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:bg-gray-50"
+                  }`}
+                >
+                  ✏️ Enter a custom reason...
+                </button>
+              </div>
+
+              {/* Custom reason textarea */}
+              {userRejectionCustom && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <textarea
+                    value={userRejectionReason}
+                    onChange={(e) => setUserRejectionReason(e.target.value)}
+                    placeholder="Enter the specific reason for rejection..."
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-red-400 resize-none h-24 transition-colors"
+                    autoFocus
+                  />
+                </motion.div>
+              )}
+
+              {/* Preview */}
+              {userRejectionReason.trim() && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">Applicant will see:</p>
+                  <p className="text-gray-700 text-xs leading-relaxed italic">
+                    "Your registration request has been rejected. Reason: <strong>{userRejectionReason.trim()}</strong>. If you believe this was a mistake, please register again."
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUserRejectModal(false);
+                  setPendingRejectUser(null);
+                  setUserRejectionReason("");
+                  setUserRejectionCustom(false);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-medium hover:bg-gray-100 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRejectUserWithReason}
+                disabled={!userRejectionReason.trim() || processingUserId === pendingRejectUser.id}
+                className="flex-1 px-4 py-2.5 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                style={{ background: "linear-gradient(135deg, #800000, #c53030)" }}
+              >
+                {processingUserId === pendingRejectUser.id ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Rejecting...
+                  </span>
+                ) : "Reject Application"}
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
 

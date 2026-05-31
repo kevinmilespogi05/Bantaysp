@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, User, Phone, Upload, CheckCircle, ArrowRight, MapPin, AlertCircle, Loader, FileText, Calendar } from "lucide-react";
@@ -15,6 +15,10 @@ const steps = [
 export function RegisterPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Refs for each OTP digit input (for focus management)
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null, null, null]);
+  // Ref for the Complete Registration button (auto-focused when OTP is complete)
+  const completeButtonRef = useRef<HTMLButtonElement>(null);
   const [step, setStep] = useState(1);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -48,6 +52,14 @@ export function RegisterPage() {
     "Brgy. San Pablo", "Brgy. Del Pilar", "Brgy. Looc", "Brgy. Sta. Maria",
     "Brgy. San Juan", "Brgy. Balaybay", "Brgy. Nagbayan", "Brgy. San Agustin",
   ];
+
+  // Auto-focus the Complete Registration button once all 6 OTP digits are filled
+  useEffect(() => {
+    if (step === 3 && otp.every((d) => d !== "")) {
+      // Small delay so the state settles and the button is fully rendered
+      setTimeout(() => completeButtonRef.current?.focus(), 80);
+    }
+  }, [otp, step]);
 
   const handleNext = async () => {
     setError(null);
@@ -278,15 +290,101 @@ export function RegisterPage() {
     setLoading(false);
   };
 
-  const handleOtpChange = (value: string, index: number) => {
+  // ── OTP Handlers ──────────────────────────────────────────────────────────
+
+  /**
+   * Handles paste events on any OTP input.
+   * Extracts all digits from the pasted text and distributes them across the 6 fields.
+   * Works with Gmail, SMS forwarders, clipboard managers, etc.
+   */
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text");
+    // Strip everything that isn't a digit
+    const digits = pasted.replace(/\D/g, "").slice(0, 6).split("");
+
+    if (digits.length === 0) return;
+
     const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
+    digits.forEach((d, idx) => {
+      if (idx < 6) newOtp[idx] = d;
+    });
     setOtp(newOtp);
-    if (value && index < 5) {
+
+    // Move focus to the field after the last pasted digit (or last field)
+    const focusIdx = Math.min(digits.length, 5);
+    setTimeout(() => {
+      otpInputRefs.current[focusIdx]?.focus();
+    }, 0);
+  };
+
+  /**
+   * Handles per-digit typing with numeric filter and auto-advance.
+   */
+  const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>, i: number) => {
+    const raw = e.target.value;
+    // Accept only the last digit entered (handles cases where browser appends a char)
+    const digit = raw.replace(/\D/g, "").slice(-1);
+    const newOtp = [...otp];
+    newOtp[i] = digit;
+    setOtp(newOtp);
+
+    // Auto-advance to next field on valid input
+    if (digit && i < 5) {
       setTimeout(() => {
-        const next = document.getElementById(`otp-${index + 1}`);
-        next?.focus();
+        otpInputRefs.current[i + 1]?.focus();
       }, 0);
+    }
+  };
+
+  /**
+   * Keyboard navigation: Backspace clears + moves back, ArrowLeft/Right moves between fields.
+   */
+  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, i: number) => {
+    if (e.key === "Backspace") {
+      if (otp[i]) {
+        // Clear the current field
+        const newOtp = [...otp];
+        newOtp[i] = "";
+        setOtp(newOtp);
+      } else if (i > 0) {
+        // Move to previous field when current is already empty
+        const newOtp = [...otp];
+        newOtp[i - 1] = "";
+        setOtp(newOtp);
+        setTimeout(() => otpInputRefs.current[i - 1]?.focus(), 0);
+      }
+      e.preventDefault();
+    } else if (e.key === "ArrowLeft" && i > 0) {
+      otpInputRefs.current[i - 1]?.focus();
+      e.preventDefault();
+    } else if (e.key === "ArrowRight" && i < 5) {
+      otpInputRefs.current[i + 1]?.focus();
+      e.preventDefault();
+    } else if (e.key === "Tab") {
+      // Let Tab/Shift+Tab work naturally between fields
+      // (default browser behaviour is fine here)
+    }
+  };
+
+  /** Paste from clipboard API (mobile-friendly helper button) */
+  const handleClipboardPaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const digits = text.replace(/\D/g, "").slice(0, 6).split("");
+      if (digits.length === 0) {
+        setError("No numeric code found in clipboard");
+        return;
+      }
+      const newOtp = [...otp];
+      digits.forEach((d, idx) => {
+        if (idx < 6) newOtp[idx] = d;
+      });
+      setOtp(newOtp);
+      const focusIdx = Math.min(digits.length, 5);
+      setTimeout(() => otpInputRefs.current[focusIdx]?.focus(), 0);
+    } catch {
+      setError("Unable to read clipboard. Please paste manually with Ctrl+V.");
     }
   };
 
@@ -662,78 +760,97 @@ export function RegisterPage() {
                 exit={{ opacity: 0, x: -30 }}
                 transition={{ duration: 0.3 }}
               >
-                <div className="mb-6">
+                <div className="mb-8">
                   <h2 className="text-gray-900 mb-1" style={{ fontSize: "1.6rem", fontWeight: 700 }}>Enter OTP Code</h2>
                   <p className="text-gray-500 text-sm">
                     We sent a 6-digit code to{" "}
-                    <span className="font-medium text-gray-700">{form.email}</span>
+                    <span className="font-medium" style={{ color: "#800000" }}>{form.email}</span>
                   </p>
                 </div>
 
-                <div className="space-y-6">
-                  <div className="flex gap-2 justify-center">
-                    {otp.map((digit, i) => (
-                      <input
-                        key={i}
-                        id={`otp-${i}`}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, "");
-                          const newOtp = [...otp];
-                          newOtp[i] = value;
-                          setOtp(newOtp);
-                          
-                          // Move to next field if user entered a digit
-                          if (value && i < 5) {
-                            setTimeout(() => {
-                              const nextInput = document.getElementById(`otp-${i + 1}`);
-                              nextInput?.focus();
-                            }, 0);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Backspace") {
-                            if (otp[i]) {
-                              // If current field has a value, just clear it
-                              const newOtp = [...otp];
-                              newOtp[i] = "";
-                              setOtp(newOtp);
-                            } else if (i > 0) {
-                              // If current field is empty, move to previous field
-                              const prevInput = document.getElementById(`otp-${i - 1}`);
-                              prevInput?.focus();
-                            }
-                          }
-                        }}
-                        className="w-12 h-14 text-center text-xl font-bold rounded-xl border-2 border-gray-200 bg-white outline-none transition-all"
-                        style={{ borderColor: digit ? "#800000" : undefined }}
-                        onFocus={(e) => (e.target.style.borderColor = "#800000")}
-                        onBlur={(e) => (e.target.style.borderColor = digit ? "#800000" : "#e5e7eb")}
-                      />
-                    ))}
+                <div className="space-y-5">
+                  {/* OTP digit inputs */}
+                  <div>
+                    <div className="flex gap-2 justify-center">
+                      {otp.map((digit, i) => (
+                        <input
+                          key={i}
+                          id={`otp-${i}`}
+                          ref={(el) => { otpInputRefs.current[i] = el; }}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          autoComplete={i === 0 ? "one-time-code" : "off"}
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleOtpChange(e, i)}
+                          onKeyDown={(e) => handleOtpKeyDown(e, i)}
+                          onPaste={handleOtpPaste}
+                          onFocus={(e) => {
+                            e.target.select();
+                            e.target.style.borderColor = "#800000";
+                            e.target.style.boxShadow = "0 0 0 3px rgba(128,0,0,0.12)";
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.borderColor = digit ? "#800000" : "#e5e7eb";
+                            e.target.style.boxShadow = "none";
+                          }}
+                          className="w-12 h-14 text-center text-2xl font-bold rounded-xl border-2 bg-white outline-none transition-all select-none"
+                          style={{
+                            borderColor: digit ? "#800000" : "#e5e7eb",
+                            color: digit ? "#800000" : "#111827",
+                            caretColor: "#800000",
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Paste hint */}
+                    <p className="text-center text-xs text-gray-400 mt-3">
+                      💡 Tip: Copy the 6-digit code and press{" "}
+                      <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-gray-600 font-mono" style={{ fontSize: "11px" }}>Ctrl+V</kbd>
+                      {" "}on any field to auto-fill
+                    </p>
                   </div>
 
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-                    <div>
-                      <p className="text-green-700 text-sm font-medium">Almost there!</p>
-                      <p className="text-green-600 text-xs">Enter the code to complete your registration.</p>
+                  {/* Status banners */}
+                  {otp.join("").length === 6 ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-xl p-4 flex items-center gap-3 border"
+                      style={{ backgroundColor: "#f0fdf4", borderColor: "#86efac" }}
+                    >
+                      <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                      <div>
+                        <p className="text-green-700 text-sm font-semibold">All digits entered!</p>
+                        <p className="text-green-600 text-xs">Click "Complete Registration" to finish.</p>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                      <div>
+                        <p className="text-green-700 text-sm font-medium">Almost there!</p>
+                        <p className="text-green-600 text-xs">Enter the code to complete your registration.</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {otpResent && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 animate-pulse">
-                      <p className="text-blue-700 text-sm font-medium">OTP Resent</p>
-                      <p className="text-blue-600 text-xs">Check your email for the new code.</p>
-                    </div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-blue-50 border border-blue-200 rounded-xl p-3"
+                    >
+                      <p className="text-blue-700 text-sm font-medium">✅ New code sent!</p>
+                      <p className="text-blue-600 text-xs">Check your email for the new OTP.</p>
+                    </motion.div>
                   )}
 
                   <p className="text-center text-sm text-gray-500">
                     Didn't receive a code?{" "}
-                    <button 
+                    <button
                       type="button"
                       onClick={handleResendOtp}
                       disabled={loading}
@@ -760,6 +877,8 @@ export function RegisterPage() {
               </button>
             )}
             <button
+              ref={step === 3 ? completeButtonRef : undefined}
+              id="complete-registration-btn"
               onClick={handleNext}
               disabled={loading}
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-semibold text-sm transition-all hover:scale-[1.02] hover:shadow-lg disabled:opacity-70"

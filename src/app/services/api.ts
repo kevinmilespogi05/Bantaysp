@@ -1090,9 +1090,30 @@ export async function approveUser(userId: string): Promise<ApiResponse<{ success
   return apiFetch<{ success: boolean; message: string }>(`/admin/approve-user/${userId}`, { method: "POST" }, false);
 }
 
-/** Reject a pending user (remove from pending_verification) */
+/** Reject a pending user (remove from pending_verification, store rejection reason) */
 export async function rejectUser(userId: string, reason?: string): Promise<ApiResponse<{ success: boolean; message: string }>> {
   return apiFetch<{ success: boolean; message: string }>(`/admin/reject-user/${userId}`, { method: "POST", body: JSON.stringify({ reason }) }, false);
+}
+
+export interface RejectionStatus {
+  rejected: boolean;
+  reason?: string;
+  firstName?: string;
+  lastName?: string;
+  rejectedAt?: string;
+}
+
+/**
+ * Public: Check whether an email address has a pending rejection record.
+ * Called after a failed login attempt to show the user why their registration was rejected.
+ * Does NOT require authentication — uses email only.
+ */
+export async function checkRejectionStatus(email: string): Promise<ApiResponse<RejectionStatus>> {
+  return apiFetch<RejectionStatus>(
+    `/auth/check-rejection?email=${encodeURIComponent(email.toLowerCase().trim())}`,
+    { method: "GET" },
+    false // No auth token required
+  );
 }
 
 /** Upload file to Cloudinary */

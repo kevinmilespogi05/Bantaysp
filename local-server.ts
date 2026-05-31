@@ -410,6 +410,18 @@ app.post("/register", async (req, res) => {
       });
     }
 
+    // If this email was previously rejected, clear the rejection record to allow re-registration
+    const { error: rejectionClearError } = await supabase
+      .from("rejected_registrations")
+      .delete()
+      .eq("email", email);
+
+    if (rejectionClearError) {
+      console.warn(`[Register] Could not clear rejection record for ${email} (non-critical):`, rejectionClearError);
+    } else {
+      console.log(`[Register] Cleared any rejection record for ${email} — proceeding with re-registration`);
+    }
+
     // STEP 1 ONLY: Just validate, don't insert to DB yet
     console.log(`✅ [Register] Step 1 validation passed for ${email}`);
     return res.status(200).json({
@@ -458,6 +470,18 @@ app.post("/generate-otp", async (req, res) => {
       return res.status(409).json({
         error: "Email already registered. Please log in.",
       });
+    }
+
+    // If this email was previously rejected, clear the rejection record to allow re-registration
+    const { error: rejectionClearError } = await supabase
+      .from("rejected_registrations")
+      .delete()
+      .eq("email", email);
+
+    if (rejectionClearError) {
+      console.warn(`[GenerateOTP] Could not clear rejection record for ${email} (non-critical):`, rejectionClearError);
+    } else {
+      console.log(`[GenerateOTP] Cleared any rejection record for ${email} — proceeding with re-registration`);
     }
 
     // Check if already in OTP memory store (already sent OTP in current session)
@@ -2715,15 +2739,49 @@ app.post("/admin/approve-user/:userId", async (req, res) => {
   }
 });
 
-// ─── Reject User (Delete from pending_verification) ─────────────────────────
+// ─── Reject User (Delete from pending_verification, store rejection reason) ──
 
 app.post("/admin/reject-user/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
     const { reason } = req.body;
-    console.log(`[RejectUser] Rejecting user ${userId}...`);
+    const rejectionReason = (reason || "Your application did not meet the requirements.").trim();
+    console.log(`[RejectUser] Rejecting user ${userId} with reason: "${rejectionReason}"`);
 
-    // Delete from pending_verification
+    // Step 1: Fetch the pending user's data before we delete it
+    const { data: pendingUser, error: fetchError } = await supabase
+      .from("pending_verification")
+      .select("email, first_name, last_name")
+      .eq("user_id", userId)
+      .single();
+
+    if (fetchError || !pendingUser) {
+      console.error(`[RejectUser] User not found in pending_verification:`, fetchError);
+      return res.status(404).json({ error: "User not found in pending verification" });
+    }
+
+    // Step 2: Store the rejection reason so the user can see it when they try to re-register / log in
+    const { error: rejectionInsertError } = await supabase
+      .from("rejected_registrations")
+      .upsert(
+        {
+          email: pendingUser.email,
+          first_name: pendingUser.first_name,
+          last_name: pendingUser.last_name,
+          rejection_reason: rejectionReason,
+          rejected_at: new Date().toISOString(),
+        },
+        { onConflict: "email" }
+      );
+
+    if (rejectionInsertError) {
+      console.error(`[RejectUser] Could not store rejection reason:`, rejectionInsertError);
+      // Non-fatal — continue with deletion
+    } else {
+      console.log(`[RejectUser] Rejection reason stored for ${pendingUser.email}`);
+    }
+
+    // Step 3: Delete from pending_verification
     const { error: deleteError } = await supabase
       .from("pending_verification")
       .delete()
@@ -2734,18 +2792,64 @@ app.post("/admin/reject-user/:userId", async (req, res) => {
       return res.status(500).json({ error: "Failed to reject user" });
     }
 
-    // Also delete the auth user
+    // Step 4: Delete the Supabase Auth user so they can re-register cleanly
     try {
       await supabase.auth.admin.deleteUser(userId);
+      console.log(`[RejectUser] Auth user ${userId} deleted`);
     } catch (authErr) {
       console.warn(`[RejectUser] Could not delete auth user (may already be deleted):`, authErr);
     }
 
-    console.log(`[RejectUser] Successfully rejected user ${userId}`);
+    console.log(`[RejectUser] Successfully rejected user ${userId} (${pendingUser.email})`);
     res.json({ success: true, message: "User rejected and removed from pending verification" });
   } catch (err) {
     console.error(`[RejectUser] Error:`, err);
     res.status(500).json({ error: "Failed to reject user" });
+  }
+});
+
+// ─── Public: Check if an email has a rejection record ─────────────────────────
+// Called from the Login Page after a failed login to show rejection reason.
+// This endpoint requires NO authentication — it only checks the email.
+
+app.get("/auth/check-rejection", async (req, res) => {
+  try {
+    const { email } = req.query as { email?: string };
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "Missing required query parameter: email" });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    console.log(`[CheckRejection] Checking rejection status for ${emailLower}`);
+
+    const { data, error } = await supabase
+      .from("rejected_registrations")
+      .select("email, first_name, last_name, rejection_reason, rejected_at")
+      .eq("email", emailLower)
+      .maybeSingle();
+
+    if (error) {
+      console.error(`[CheckRejection] DB error:`, error);
+      return res.status(500).json({ error: "Failed to check rejection status" });
+    }
+
+    if (!data) {
+      console.log(`[CheckRejection] No rejection record found for ${emailLower}`);
+      return res.json({ rejected: false });
+    }
+
+    console.log(`[CheckRejection] Found rejection record for ${emailLower}: "${data.rejection_reason}"`);
+    return res.json({
+      rejected: true,
+      reason: data.rejection_reason,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      rejectedAt: data.rejected_at,
+    });
+  } catch (err) {
+    console.error(`[CheckRejection] Error:`, err);
+    res.status(500).json({ error: "Failed to check rejection status" });
   }
 });
 

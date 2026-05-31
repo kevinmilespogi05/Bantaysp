@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router";
-import { motion } from "motion/react";
-import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
 import { useAuth, type UserRole } from "../context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { BantayLogo } from "../components/ui/BantayLogo";
+import { checkRejectionStatus, type RejectionStatus } from "../services/api";
 
 // ── Animated counter hook ────────────────────────────────────────────────────
 function useCountUp(target: number | null, duration = 1200) {
@@ -44,6 +45,9 @@ export function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Rejection state — populated after a failed login when rejection record exists
+  const [rejectionInfo, setRejectionInfo] = useState<RejectionStatus | null>(null);
+  const [checkingRejection, setCheckingRejection] = useState(false);
 
   // ── Live stats ─────────────────────────────────────────────────────────────
   const [stats, setStats] = useState<LiveStats | null>(null);
@@ -100,6 +104,7 @@ export function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setRejectionInfo(null);
     if (!email || !password) {
       setError("Please fill in all fields.");
       return;
@@ -108,14 +113,36 @@ export function LoginPage() {
     const err = await login(email, password);
     setLoading(false);
     if (err) {
+      // If the user is "pending" or similar, check if they were actually rejected
+      const isPendingOrNoAccount =
+        err.toLowerCase().includes("pending") ||
+        err.toLowerCase().includes("no account") ||
+        err.toLowerCase().includes("not found");
+
+      if (isPendingOrNoAccount && email) {
+        setCheckingRejection(true);
+        try {
+          const { data: rejectionData } = await checkRejectionStatus(email);
+          if (rejectionData?.rejected) {
+            setRejectionInfo(rejectionData);
+            setError(""); // Clear generic error — show rejection banner instead
+            setCheckingRejection(false);
+            return;
+          }
+        } catch {
+          // Silently ignore — fall through to show original error
+        }
+        setCheckingRejection(false);
+      }
+
       setError(err);
       return;
     }
-    
+
     // Get the current session to determine user role
     const { data: { session } } = await supabase.auth.getSession();
     const userRole = (session?.user?.user_metadata?.role as UserRole) ?? "resident";
-    
+
     // Redirect based on user role
     if (userRole === "patrol") navigate("/app/patrol/dashboard");
     else if (userRole === "admin") navigate("/app/admin");
@@ -234,9 +261,99 @@ export function LoginPage() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm">
+            {/* ── Rejection Banner ── */}
+            <AnimatePresence>
+              {rejectionInfo && rejectionInfo.rejected && (
+                <motion.div
+                  key="rejection-banner"
+                  initial={{ opacity: 0, y: -12, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -12, scale: 0.98 }}
+                  transition={{ duration: 0.35, ease: "easeOut" }}
+                  className="rounded-2xl overflow-hidden shadow-sm border border-red-200"
+                  style={{ background: "linear-gradient(135deg, #fff5f5 0%, #fff1f1 100%)" }}
+                >
+                  {/* Red accent bar */}
+                  <div className="h-1" style={{ background: "linear-gradient(90deg, #800000, #c53030)" }} />
+
+                  <div className="px-5 py-4">
+                    {/* Header */}
+                    <div className="flex items-start gap-3 mb-3">
+                      <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ background: "linear-gradient(135deg, #800000, #c53030)" }}
+                      >
+                        <XCircle className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900" style={{ fontSize: "0.95rem" }}>
+                          Registration Request Rejected
+                        </p>
+                        <p className="text-gray-500 text-xs mt-0.5">
+                          {rejectionInfo.rejectedAt
+                            ? `Rejected on ${new Date(rejectionInfo.rejectedAt).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}`
+                            : "Your application was not approved"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Rejection Reason */}
+                    <div
+                      className="rounded-xl px-4 py-3 mb-4 border"
+                      style={{ backgroundColor: "#fff", borderColor: "#fca5a5" }}
+                    >
+                      <p className="text-xs font-semibold text-red-700 mb-1 uppercase tracking-wide">Reason</p>
+                      <p className="text-gray-800 text-sm leading-relaxed">
+                        {rejectionInfo.reason}
+                      </p>
+                    </div>
+
+                    {/* Message */}
+                    <p className="text-gray-600 text-sm leading-relaxed mb-4">
+                      If you believe this was a mistake, please register again and ensure that all
+                      submitted information and credentials are accurate and valid.
+                    </p>
+
+                    {/* Actions */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Link
+                        to="/register"
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 hover:shadow-md"
+                        style={{ background: "linear-gradient(135deg, #800000, #c53030)" }}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Register Again
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setRejectionInfo(null)}
+                        className="flex-1 py-2.5 px-4 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── Generic Error ── */}
+            {error && !rejectionInfo?.rejected && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm flex items-center gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0" />
                 {error}
+              </motion.div>
+            )}
+
+            {/* Rejection checking indicator */}
+            {checkingRejection && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-500 text-sm flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin shrink-0" />
+                Checking account status...
               </div>
             )}
 
