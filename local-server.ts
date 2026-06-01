@@ -1176,19 +1176,30 @@ app.post("/reports", async (req, res) => {
       }
     }
 
-    // Get current count of reports for this year to generate token
+    // Get the report with the highest ID sequence for the current year to generate token
     const currentYear = new Date().getFullYear();
-    const { count: reportCount, error: countError } = await supabase
+    const { data: maxReport, error: maxError } = await supabase
       .from("reports")
-      .select("*", { count: "exact", head: true })
-      .like("id", `REP-${currentYear}%`);
+      .select("id")
+      .like("id", `REP-${currentYear}%`)
+      .order("id", { ascending: false })
+      .limit(1);
 
-    if (countError) {
-      console.error(`[CreateReport] Error counting reports:`, countError);
+    if (maxError) {
+      console.error(`[CreateReport] Error fetching max report ID:`, maxError);
     }
 
-    // Generate unique report token: REP-YYYY-XXXXX (e.g., REP-2026-001001)
-    const sequenceNumber = String((reportCount || 0) + 1).padStart(5, "0");
+    let nextSeq = 1;
+    if (maxReport && maxReport.length > 0) {
+      const parts = maxReport[0].id.split("-");
+      const lastSeq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastSeq)) {
+        nextSeq = lastSeq + 1;
+      }
+    }
+
+    // Generate unique report token: REP-YYYY-XXXXX (e.g., REP-2026-00011)
+    const sequenceNumber = String(nextSeq).padStart(5, "0");
     const reportId = `REP-${currentYear}-${sequenceNumber}`;
 
     // Generate other metadata
@@ -1254,7 +1265,7 @@ app.post("/reports", async (req, res) => {
 
     if (error) {
       console.error(`[CreateReport] Error creating report:`, error);
-      return res.status(500).json({ error: "Failed to create report" });
+      return res.status(500).json({ error: `Failed to create report: ${error.message || JSON.stringify(error)}` });
     }
 
     console.log(`[CreateReport] ✅ Report created: ${reportId}`);
@@ -1265,7 +1276,7 @@ app.post("/reports", async (req, res) => {
     res.status(201).json(data?.[0] || { success: true, id: reportId });
   } catch (err) {
     console.error(`[CreateReport] Error:`, err);
-    res.status(500).json({ error: "Failed to create report" });
+    res.status(500).json({ error: `Failed to create report: ${err instanceof Error ? err.message : String(err)}` });
   }
 });
 

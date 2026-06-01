@@ -786,7 +786,7 @@ app.post("/reports", async (c) => {
       user_id: userId,  // Authenticated user ID from JWT
       title: body.title.toString().trim(),
       category: body.category.toString().trim(),
-      status: "pending",
+      status: "pending_verification",
       location: body.location.toString().trim(),
       timestamp: new Date().toISOString(),
       description: body.description.toString().trim(),
@@ -796,7 +796,7 @@ app.post("/reports", async (c) => {
       upvotes: 0,
     };
     
-    console.log(`[${requestId}] ✓ Report object created - ID: ${id}, User: ${userId.substring(0, 8)}..., Status: pending, Verified: false`);
+    console.log(`[${requestId}] ✓ Report object created - ID: ${id}, User: ${userId.substring(0, 8)}..., Status: pending_verification, Verified: false`);
     
     // Step 3: Save report to Supabase with user_id
     try {
@@ -822,13 +822,13 @@ app.post("/reports", async (c) => {
       
       if (insertError) {
         console.error(`[${requestId}] Supabase insert error:`, insertError);
-        return c.json({ error: "Failed to create report" }, 500);
+        return c.json({ error: `Failed to create report: ${insertError.message || JSON.stringify(insertError)}` }, 500);
       }
       
       console.log(`[${requestId}] Report successfully inserted into Supabase - ID: ${id}`);
     } catch (err) {
       console.error(`[${requestId}] Error inserting report:`, err instanceof Error ? err.message : String(err));
-      return c.json({ error: "Failed to create report" }, 500);
+      return c.json({ error: `Failed to create report: ${err instanceof Error ? err.message : String(err)}` }, 500);
     }
     
     // Step 4: Leaderboard points are now awarded via database trigger when verified=true

@@ -19,7 +19,7 @@ import {
 import { BantayLogo } from "../components/ui/BantayLogo";
 import { trackVisitor, fetchVisitorCount, generateSessionId, fetchDashboardStats } from "../services/api";
 
-const HERO_BG = "https://images.unsplash.com/photo-1771905603448-14e6c48f7665?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1920";
+const HERO_BG = "/5d8ed161-000a-4049-a27a-70db4845e14a.jpg";
 
 const staticStats = [
   { label: "Reports Filed", value: "0", icon: FileText, color: "#800000", live: true },

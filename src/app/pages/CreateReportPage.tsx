@@ -370,9 +370,11 @@ export function CreateReportPage() {
     });
 
     if (error || !data) {
-      setSubmitError(error ?? "Failed to submit report. Please try again.");
+      const errorMsg = error ?? "Failed to submit report. Please try again.";
+      setSubmitError(errorMsg);
       setSubmitting(false);
       setUploadProgress(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
@@ -713,6 +715,15 @@ export function CreateReportPage() {
             </div>
 
             {/* Submit */}
+            {submitError && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold mb-0.5">Failed to submit report</p>
+                  <p className="break-words">{submitError}</p>
+                </div>
+              </div>
+            )}
             <button
               type="submit"
               disabled={submitting || uploadingImage || !form.title || !form.description || !form.category || !form.location}
