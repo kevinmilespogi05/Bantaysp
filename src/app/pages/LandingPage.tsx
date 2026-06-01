@@ -187,7 +187,10 @@ export function LandingPage() {
       >
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BantayLogo size={36} />
+            <div className="flex items-center gap-2">
+              <BantayLogo size={36} />
+              <img src="/sanpablo.jpg" alt="Barangay San Pablo Logo" width={36} height={36} className="rounded-full object-contain shrink-0 bg-white" />
+            </div>
             <div>
               <div className="font-bold text-white text-lg leading-none">Bantay SP</div>
               <div className="text-white/60" style={{ fontSize: "10px" }}>Castillejos, Zambales</div>
@@ -673,7 +676,10 @@ export function LandingPage() {
       <footer className="bg-gray-900 text-white py-10 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <BantayLogo size={32} />
+            <div className="flex items-center gap-2">
+              <BantayLogo size={32} />
+              <img src="/sanpablo.jpg" alt="Barangay San Pablo Logo" width={32} height={32} className="rounded-full object-contain shrink-0 bg-white" />
+            </div>
             <div>
               <div className="font-bold">Bantay SP</div>
               <div className="text-gray-400" style={{ fontSize: "11px" }}>San Pablo, Castillejos, Zambales</div>

@@ -1478,7 +1478,7 @@ export function AdminDashboard() {
                       disabled={processingUserId === user.id}
                       className="flex-1 py-2 rounded-xl text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {processingUserId === user.id ? "..." : "Reject"}
+                      {processingUserId === user.id ? "..." : "Decline"}
                     </button>
                   </div>
                 </motion.div>
@@ -1513,7 +1513,7 @@ export function AdminDashboard() {
                   <X className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900">Reject Registration</h3>
+                  <h3 className="font-bold text-gray-900">Decline Registration</h3>
                   <p className="text-gray-400 text-xs">{pendingRejectUser.name}</p>
                 </div>
               </div>
@@ -1522,7 +1522,7 @@ export function AdminDashboard() {
             {/* Body */}
             <div className="px-6 py-5 space-y-4">
               <p className="text-gray-600 text-sm">
-                Please provide a reason for rejecting this registration. The applicant will see this message when they try to log in.
+                Please provide a reason for declining this registration. The applicant will see this message when they try to log in.
               </p>
 
               {/* Quick-select presets */}
@@ -1585,7 +1585,7 @@ export function AdminDashboard() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
                   <p className="text-xs font-semibold text-amber-700 mb-1">Applicant will see:</p>
                   <p className="text-gray-700 text-xs leading-relaxed italic">
-                    "Your registration request has been rejected. Reason: <strong>{userRejectionReason.trim()}</strong>. If you believe this was a mistake, please register again."
+                    "Your registration request has been declined. Reason: <strong>{userRejectionReason.trim()}</strong>. If you believe this was a mistake, please register again."
                   </p>
                 </div>
               )}
@@ -1615,9 +1615,9 @@ export function AdminDashboard() {
                 {processingUserId === pendingRejectUser.id ? (
                   <span className="flex items-center justify-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Rejecting...
+                    Declining...
                   </span>
-                ) : "Reject Application"}
+                ) : "Decline Application"}
               </button>
             </div>
           </motion.div>
@@ -1789,21 +1789,21 @@ export function AdminDashboard() {
           confirmAction?.type === "approve"
             ? "Approve User"
             : confirmAction?.type === "reject"
-              ? "Reject Application"
+              ? "Decline Application"
               : "Delete Report"
         }
         message={
           confirmAction?.type === "approve"
             ? `Ready to approve ${confirmAction.userName}? They will be moved to verified users and can access the app.`
             : confirmAction?.type === "reject"
-              ? `Are you sure you want to reject ${confirmAction.userName}'s application? They will be removed from the system.`
+              ? `Are you sure you want to decline ${confirmAction.userName}'s application? They will be removed from the system.`
               : "Delete this report? This action cannot be undone."
         }
         confirmText={
           confirmAction?.type === "approve"
             ? "Approve"
             : confirmAction?.type === "reject"
-              ? "Reject"
+              ? "Decline"
               : "Delete"
         }
         isDangerous={confirmAction?.type === "delete-report" || confirmAction?.type === "reject"}
